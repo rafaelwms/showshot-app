@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../../core/theme.dart';
@@ -28,9 +29,9 @@ class GlassPanel extends StatelessWidget {
     final body = Container(
       padding: padding,
       decoration: BoxDecoration(
-        color: color ?? AppColors.surfaceOverlay,
+        color: color ?? context.palette.surfaceOverlay,
         borderRadius: BorderRadius.circular(radius),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: context.palette.border),
         boxShadow: const [
           BoxShadow(
             color: Color(0x66000000),
@@ -79,12 +80,12 @@ class ToolButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final enabled = onPressed != null;
     final color = !enabled
-        ? AppColors.textFaint
+        ? context.palette.textFaint
         : danger
         ? AppColors.danger
         : active
         ? Colors.white
-        : AppColors.textMuted;
+        : context.palette.textMuted;
     return Tooltip(
       message: shortcut == null ? tooltip : '$tooltip  ·  $shortcut',
       child: Material(
@@ -98,7 +99,7 @@ class ToolButton extends StatelessWidget {
             width: size,
             height: size,
             decoration: BoxDecoration(
-              gradient: active ? AppColors.accentGradient : null,
+              gradient: active ? context.palette.accentGradient : null,
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(icon, size: iconSize, color: color),
@@ -136,7 +137,7 @@ class AccentButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(12),
           child: Ink(
             decoration: BoxDecoration(
-              gradient: AppColors.accentGradient,
+              gradient: context.palette.accentGradient,
               borderRadius: BorderRadius.circular(12),
               boxShadow: const [
                 BoxShadow(
@@ -193,7 +194,7 @@ class GhostButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = danger ? AppColors.danger : AppColors.text;
+    final color = danger ? AppColors.danger : context.palette.text;
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -206,7 +207,7 @@ class GhostButton extends StatelessWidget {
             border: Border.all(
               color: danger
                   ? AppColors.danger.withValues(alpha: 0.5)
-                  : AppColors.borderStrong,
+                  : context.palette.borderStrong,
             ),
           ),
           padding: EdgeInsets.symmetric(
@@ -250,16 +251,16 @@ class KeyCap extends StatelessWidget {
       decoration: BoxDecoration(
         color: light
             ? Colors.white.withValues(alpha: 0.14)
-            : AppColors.surfaceRaised,
+            : context.palette.surfaceRaised,
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: AppColors.borderStrong),
+        border: Border.all(color: context.palette.borderStrong),
       ),
       child: Text(
         label,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 11.5,
           fontWeight: FontWeight.w600,
-          color: AppColors.text,
+          color: context.palette.text,
           fontFeatures: [FontFeature.tabularFigures()],
         ),
       ),
@@ -313,8 +314,8 @@ class WindowTitleBar extends StatelessWidget {
                 if (leading != null) ...[leading!, const SizedBox(width: 10)],
                 if (title != null)
                   DefaultTextStyle(
-                    style: const TextStyle(
-                      color: AppColors.textMuted,
+                    style: TextStyle(
+                      color: context.palette.textMuted,
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
                       letterSpacing: 0.2,
@@ -378,7 +379,7 @@ class _WindowButton extends StatelessWidget {
         child: SizedBox(
           width: 34,
           height: 30,
-          child: Icon(icon, size: 16, color: AppColors.textMuted),
+          child: Icon(icon, size: 16, color: context.palette.textMuted),
         ),
       ),
     );
@@ -395,8 +396,8 @@ class SectionLabel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       text.toUpperCase(),
-      style: const TextStyle(
-        color: AppColors.textFaint,
+      style: TextStyle(
+        color: context.palette.textFaint,
         fontSize: 11,
         fontWeight: FontWeight.w700,
         letterSpacing: 1.2,
@@ -405,19 +406,28 @@ class SectionLabel extends StatelessWidget {
   }
 }
 
-/// The Show Shot mark: viewfinder brackets with a lens.
+/// The Show Shot mark: viewfinder brackets with a lens. The same tray glyph
+/// used for the menu bar/tray icon (no background), tinted to match the
+/// surrounding text color rather than a fixed brand color — it reads as
+/// part of the UI's own type, not a separate logo lockup.
 class BrandMark extends StatelessWidget {
-  const BrandMark({super.key, this.size = 40});
+  const BrandMark({super.key, this.size = 40, this.color});
 
   final double size;
 
+  /// Overrides the default (the theme's text color).
+  final Color? color;
+
   @override
   Widget build(BuildContext context) {
-    return Image.asset(
-      'assets/branding/app_icon_256.png',
+    return SvgPicture.asset(
+      'assets/branding/mark.svg',
       width: size,
       height: size,
-      filterQuality: FilterQuality.medium,
+      colorFilter: ColorFilter.mode(
+        color ?? context.palette.text,
+        BlendMode.srcIn,
+      ),
     );
   }
 }

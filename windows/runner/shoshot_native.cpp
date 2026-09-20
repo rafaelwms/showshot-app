@@ -5,6 +5,7 @@
 #include <shellapi.h>
 #include <shellscalingapi.h>
 #include <shlobj.h>
+#include <winreg.h>
 
 #include <algorithm>
 #include <cstring>
@@ -213,6 +214,7 @@ ShoShotNative::ShoShotNative(HWND hwnd, flutter::BinaryMessenger* messenger)
       [this](const auto& call, auto result) {
         HandleMethodCall(call, std::move(result));
       });
+  last_accent_argb_ = CurrentAccentArgb();
 }
 
 ShoShotNative::~ShoShotNative() {
@@ -274,9 +276,44 @@ void ShoShotNative::HandleMethodCall(
       ILFree(pidl);
     }
     result->Success();
+  } else if (method == "getSystemAccent") {
+    result->Success(EncodableValue(CurrentAccentArgb()));
   } else {
     result->NotImplemented();
   }
+}
+
+int64_t ShoShotNative::CurrentAccentArgb() {
+  // Settings > Personalization > Colors' accent color, stored as a DWORD in
+  // ABGR order (not ARGB) by DWM.
+  HKEY key;
+  int64_t fallback = (int64_t)0xFF7C5CFFLL;  // matches the Dart-side default
+  if (RegOpenKeyExW(HKEY_CURRENT_USER,
+                    L"Software\\Microsoft\\Windows\\DWM", 0, KEY_READ,
+                    &key) != ERROR_SUCCESS) {
+    return fallback;
+  }
+  DWORD abgr = 0;
+  DWORD size = sizeof(abgr);
+  DWORD type = 0;
+  LSTATUS status = RegQueryValueExW(key, L"AccentColor", nullptr, &type,
+                                    reinterpret_cast<BYTE*>(&abgr), &size);
+  RegCloseKey(key);
+  if (status != ERROR_SUCCESS || type != REG_DWORD) return fallback;
+
+  // Byte 3 (alpha) is unused: the output is always forced fully opaque.
+  uint8_t b = (abgr >> 16) & 0xFF;
+  uint8_t g = (abgr >> 8) & 0xFF;
+  uint8_t r = abgr & 0xFF;
+  return ((int64_t)0xFF << 24) | ((int64_t)r << 16) | ((int64_t)g << 8) | b;
+}
+
+void ShoShotNative::OnSystemAccentMaybeChanged() {
+  int64_t current = CurrentAccentArgb();
+  if (current == last_accent_argb_) return;
+  last_accent_argb_ = current;
+  channel_->InvokeMethod("systemAccentChanged",
+                        std::make_unique<EncodableValue>(current));
 }
 
 EncodableValue ShoShotNative::GetDisplays() {

@@ -1,6 +1,7 @@
 #include "shoshot_native.h"
 
 #include <gdk/gdk.h>
+#include <gio/gio.h>
 #ifdef GDK_WINDOWING_X11
 #include <X11/Xatom.h>
 #include <X11/Xlib.h>
@@ -26,6 +27,13 @@ struct NativeState {
   bool overlay = false;
   int overlay_monitor = 0;
   gboolean saved_decorated = TRUE;
+
+  // System accent color, read once via the desktop portal and then kept in
+  // sync by subscribing to its change signal (works under both X11 and
+  // Wayland — it is a D-Bus session service, not a display-server API).
+  GDBusConnection* session_bus = nullptr;
+  guint accent_signal_id = 0;
+  int64_t last_accent_argb = 0;
 };
 
 NativeState* g_state = nullptr;
@@ -489,6 +497,104 @@ bool SetClipboardImage(FlValue* rgba, int width, int height) {
 }
 
 // ---------------------------------------------------------------------------
+// System accent color (org.freedesktop.portal.Settings — GNOME/KDE, works
+// under X11 and Wayland alike since it is a D-Bus session service).
+// ---------------------------------------------------------------------------
+
+constexpr int64_t kFallbackAccentArgb = (int64_t)0xFF7C5CFFLL;
+
+int64_t ArgbFromRgbDoubles(double r, double g, double b) {
+  auto byte = [](double component) {
+    int v = (int)((component < 0 ? 0 : component > 1 ? 1 : component) * 255.0 +
+                  0.5);
+    return (int64_t)v;
+  };
+  return ((int64_t)0xFF << 24) | (byte(r) << 16) | (byte(g) << 8) | byte(b);
+}
+
+// `value` is the portal's `(ddd)`-tuple variant for "accent-color"; GVariant
+// print format is a debug convenience, not something we parse — read the
+// tuple members directly instead.
+bool ArgbFromAccentVariant(GVariant* value, int64_t* out) {
+  if (value == nullptr) return false;
+  // The portal wraps the reply in an extra variant layer ("v" inside "v").
+  GVariant* inner = value;
+  g_autoptr(GVariant) unwrapped = nullptr;
+  if (g_variant_is_of_type(inner, G_VARIANT_TYPE_VARIANT)) {
+    unwrapped = g_variant_get_variant(inner);
+    inner = unwrapped;
+  }
+  if (!g_variant_is_of_type(inner, G_VARIANT_TYPE("(ddd)"))) return false;
+  double r = 0, g = 0, b = 0;
+  g_variant_get(inner, "(ddd)", &r, &g, &b);
+  *out = ArgbFromRgbDoubles(r, g, b);
+  return true;
+}
+
+int64_t ReadPortalAccentArgb(GDBusConnection* bus) {
+  if (bus == nullptr) return kFallbackAccentArgb;
+  g_autoptr(GError) error = nullptr;
+  g_autoptr(GVariant) reply = g_dbus_connection_call_sync(
+      bus, "org.freedesktop.portal.Desktop", "/org/freedesktop/portal/desktop",
+      "org.freedesktop.portal.Settings", "Read",
+      g_variant_new("(ss)", "org.freedesktop.appearance", "accent-color"),
+      G_VARIANT_TYPE("(v)"), G_DBUS_CALL_FLAGS_NONE, 1000, nullptr, &error);
+  if (reply == nullptr) {
+    // Not every desktop implements the accent-color key yet (it is a
+    // recent addition to the portal spec) — this is an expected, silent
+    // fallback, not necessarily a bug.
+    return kFallbackAccentArgb;
+  }
+  g_autoptr(GVariant) boxed = nullptr;
+  g_variant_get(reply, "(v)", &boxed);
+  int64_t argb = kFallbackAccentArgb;
+  ArgbFromAccentVariant(boxed, &argb);
+  return argb;
+}
+
+void OnPortalSettingChanged(GDBusConnection*, const gchar*, const gchar*,
+                            const gchar*, const gchar* signal_name,
+                            GVariant* parameters, gpointer user_data) {
+  if (g_strcmp0(signal_name, "SettingChanged") != 0) return;
+  auto* state = static_cast<NativeState*>(user_data);
+  const gchar* ns = nullptr;
+  const gchar* key = nullptr;
+  g_autoptr(GVariant) value = nullptr;
+  // Signature: (namespace: s, key: s, value: v).
+  g_variant_get(parameters, "(&s&sv)", &ns, &key, &value);
+  if (g_strcmp0(ns, "org.freedesktop.appearance") != 0 ||
+      g_strcmp0(key, "accent-color") != 0) {
+    return;
+  }
+  int64_t argb = state->last_accent_argb;
+  if (!ArgbFromAccentVariant(value, &argb) || argb == state->last_accent_argb) {
+    return;
+  }
+  state->last_accent_argb = argb;
+  fl_method_channel_invoke_method(
+      state->channel, "systemAccentChanged",
+      fl_value_new_int(argb), nullptr, nullptr, nullptr);
+}
+
+void InitSystemAccent(NativeState* state) {
+  g_autoptr(GError) error = nullptr;
+  state->session_bus = g_bus_get_sync(G_BUS_TYPE_SESSION, nullptr, &error);
+  if (state->session_bus == nullptr) {
+    g_warning("Show Shot: could not connect to the session bus for accent "
+             "color (%s); using the fixed default instead.",
+             error ? error->message : "unknown error");
+    state->last_accent_argb = kFallbackAccentArgb;
+    return;
+  }
+  state->last_accent_argb = ReadPortalAccentArgb(state->session_bus);
+  state->accent_signal_id = g_dbus_connection_signal_subscribe(
+      state->session_bus, "org.freedesktop.portal.Desktop",
+      "org.freedesktop.portal.Settings", "SettingChanged",
+      "/org/freedesktop/portal/desktop", nullptr, G_DBUS_SIGNAL_FLAGS_NONE,
+      OnPortalSettingChanged, state, nullptr);
+}
+
+// ---------------------------------------------------------------------------
 // Method dispatch
 // ---------------------------------------------------------------------------
 
@@ -576,6 +682,9 @@ void MethodCallHandler(FlMethodChannel*, FlMethodCall* call,
       g_free(dir);
     }
     response = FL_METHOD_RESPONSE(fl_method_success_response_new(nullptr));
+  } else if (strcmp(method, "getSystemAccent") == 0) {
+    g_autoptr(FlValue) v = fl_value_new_int(state->last_accent_argb);
+    response = FL_METHOD_RESPONSE(fl_method_success_response_new(v));
   } else {
     response = FL_METHOD_RESPONSE(fl_method_not_implemented_response_new());
   }
@@ -596,4 +705,5 @@ void shoshot_native_register(GtkWindow* window, FlView* view) {
   fl_method_channel_set_method_call_handler(g_state->channel,
                                             MethodCallHandler, g_state,
                                             nullptr);
+  InitSystemAccent(g_state);
 }

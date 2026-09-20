@@ -17,15 +17,22 @@ class ShoShotApp extends StatelessWidget {
     return AppScope(
       services: services,
       child: ListenableBuilder(
-        listenable: services.settings,
+        listenable: Listenable.merge([services.settings, services.systemTheme]),
         builder: (context, _) {
+          final accent = services.systemTheme.accent.color;
           return MaterialApp(
             title: 'Show Shot',
             debugShowCheckedModeBanner: false,
             navigatorKey: services.flow.navigatorKey,
             scaffoldMessengerKey: services.flow.messengerKey,
-            theme: AppTheme.dark(),
-            themeMode: ThemeMode.dark,
+            theme: AppTheme.build(brightness: Brightness.light, accent: accent),
+            darkTheme: AppTheme.build(
+              brightness: Brightness.dark,
+              accent: accent,
+            ),
+            // Follows the OS setting — Flutter's engine already detects this
+            // on macOS/Windows/Linux, no native code of our own needed.
+            themeMode: ThemeMode.system,
             initialRoute: '/',
             onGenerateRoute: _onGenerateRoute,
           );
@@ -39,7 +46,13 @@ class ShoShotApp extends StatelessWidget {
       case '/settings':
         return _fade(const SettingsScreen(), routeSettings);
       case '/blank':
-        return _instant(const ColoredBox(color: AppColors.bg), routeSettings);
+        return _instant(
+          Builder(
+            builder: (context) =>
+                ColoredBox(color: Theme.of(context).scaffoldBackgroundColor),
+          ),
+          routeSettings,
+        );
       case '/overlay':
         return _instant(const OverlayScreen(), routeSettings);
       case '/editor':

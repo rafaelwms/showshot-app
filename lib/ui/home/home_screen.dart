@@ -46,11 +46,11 @@ class _HomeScreenState extends State<HomeScreen> {
     final strings = Strings.of(context);
     return Scaffold(
       body: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: RadialGradient(
-            center: Alignment(-0.9, -1.2),
+            center: const Alignment(-0.9, -1.2),
             radius: 1.6,
-            colors: [Color(0xFF1B1F3A), AppColors.bg],
+            colors: [context.palette.surface, context.palette.bg],
           ),
         ),
         child: Column(
@@ -135,23 +135,19 @@ class _CaptureColumn extends StatelessWidget {
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                ShaderMask(
-                  shaderCallback: (rect) =>
-                      AppColors.accentGradient.createShader(rect),
-                  child: Text(
-                    strings.appName,
-                    style: const TextStyle(
-                      fontSize: 30,
-                      fontWeight: FontWeight.w800,
-                      color: Colors.white,
-                      letterSpacing: -0.5,
-                    ),
+                Text(
+                  strings.appName,
+                  style: TextStyle(
+                    fontSize: 30,
+                    fontWeight: FontWeight.w800,
+                    color: context.palette.text,
+                    letterSpacing: -0.5,
                   ),
                 ),
                 Text(
                   strings.tagline,
-                  style: const TextStyle(
-                    color: AppColors.textMuted,
+                  style: TextStyle(
+                    color: context.palette.textMuted,
                     fontSize: 14,
                   ),
                 ),
@@ -177,17 +173,17 @@ class _CaptureColumn extends StatelessWidget {
         const SizedBox(height: 8),
         Row(
           children: [
-            const Icon(
+            Icon(
               Icons.info_outline_rounded,
               size: 15,
-              color: AppColors.textFaint,
+              color: context.palette.textFaint,
             ),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
                 strings.runsInBackground,
-                style: const TextStyle(
-                  color: AppColors.textFaint,
+                style: TextStyle(
+                  color: context.palette.textFaint,
                   fontSize: 12,
                 ),
               ),
@@ -214,8 +210,8 @@ class _CaptureColumn extends StatelessWidget {
                     Expanded(
                       child: Text(
                         strings.waylandWarning,
-                        style: const TextStyle(
-                          color: AppColors.textMuted,
+                        style: TextStyle(
+                          color: context.palette.textMuted,
                           fontSize: 12,
                         ),
                       ),
@@ -274,12 +270,14 @@ class _CaptureCardState extends State<_CaptureCard> {
           curve: Curves.easeOut,
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           decoration: BoxDecoration(
-            color: _hover ? AppColors.surfaceRaised : AppColors.surface,
+            color: _hover
+                ? context.palette.surfaceRaised
+                : context.palette.surface,
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
               color: _hover
                   ? AppColors.violet.withValues(alpha: 0.6)
-                  : AppColors.border,
+                  : context.palette.border,
             ),
             boxShadow: _hover
                 ? const [
@@ -297,8 +295,8 @@ class _CaptureCardState extends State<_CaptureCard> {
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
-                  gradient: _hover ? AppColors.accentGradient : null,
-                  color: _hover ? null : AppColors.surfaceRaised,
+                  gradient: _hover ? context.palette.accentGradient : null,
+                  color: _hover ? null : context.palette.surfaceRaised,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(_icon, color: Colors.white, size: 22),
@@ -318,8 +316,8 @@ class _CaptureCardState extends State<_CaptureCard> {
                     const SizedBox(height: 2),
                     Text(
                       strings.modeDescription(widget.mode),
-                      style: const TextStyle(
-                        color: AppColors.textMuted,
+                      style: TextStyle(
+                        color: context.palette.textMuted,
                         fontSize: 12.5,
                       ),
                     ),
@@ -378,7 +376,7 @@ class _PermissionBanner extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             strings.permissionBody,
-            style: const TextStyle(color: AppColors.textMuted, fontSize: 12.5),
+            style: TextStyle(color: context.palette.textMuted, fontSize: 12.5),
           ),
           const SizedBox(height: 10),
           Row(
@@ -425,23 +423,23 @@ class _RecentColumn extends StatelessWidget {
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: AppColors.border),
+                    border: Border.all(color: context.palette.border),
                   ),
                   padding: const EdgeInsets.all(24),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.photo_library_outlined,
-                        color: AppColors.textFaint,
+                        color: context.palette.textFaint,
                         size: 34,
                       ),
                       const SizedBox(height: 10),
                       Text(
                         strings.noRecentCaptures,
                         textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          color: AppColors.textFaint,
+                        style: TextStyle(
+                          color: context.palette.textFaint,
                           fontSize: 12.5,
                         ),
                       ),
@@ -498,7 +496,7 @@ class _RecentTileState extends State<_RecentTile> {
                 fit: BoxFit.cover,
                 cacheWidth: 360,
                 errorBuilder: (_, _, _) =>
-                    const ColoredBox(color: AppColors.surfaceRaised),
+                    ColoredBox(color: context.palette.surfaceRaised),
               ),
               AnimatedOpacity(
                 duration: const Duration(milliseconds: 150),

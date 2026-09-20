@@ -129,15 +129,15 @@ class _HotkeyFieldState extends State<HotkeyField> {
                 ),
                 decoration: BoxDecoration(
                   color: _recording
-                      ? AppColors.violet.withValues(alpha: 0.15)
-                      : AppColors.surface,
+                      ? context.palette.accentStart.withValues(alpha: 0.15)
+                      : context.palette.surface,
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(
                     color: _recording
-                        ? AppColors.violet
+                        ? context.palette.accentStart
                         : widget.failed
                         ? AppColors.danger
-                        : AppColors.borderStrong,
+                        : context.palette.borderStrong,
                   ),
                 ),
                 child: Row(
@@ -157,7 +157,9 @@ class _HotkeyFieldState extends State<HotkeyField> {
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
-                        color: _recording ? AppColors.violet : AppColors.text,
+                        color: _recording
+                            ? context.palette.accentStart
+                            : context.palette.text,
                       ),
                     ),
                   ],
@@ -173,7 +175,7 @@ class _HotkeyFieldState extends State<HotkeyField> {
                 ? null
                 : () => widget.onChanged(null),
             icon: const Icon(Icons.close_rounded, size: 16),
-            color: AppColors.textMuted,
+            color: context.palette.textMuted,
           ),
         ],
       ),

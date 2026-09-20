@@ -20,6 +20,7 @@ class DebugHooks {
   static void Function(Offset point)? overlayHover;
   static EditorController? editor;
   static Future<void> Function(String action)? editorAction;
+  static VoidCallback? settingsBack;
 }
 
 /// Debug-only automation: a line-oriented TCP server on localhost that lets
@@ -194,6 +195,9 @@ class DebugCommandServer {
         case 'home':
           await flow.showHome();
           return 'ok';
+        case 'settingsBack':
+          DebugHooks.settingsBack?.call();
+          return DebugHooks.settingsBack == null ? 'no settings screen' : 'ok';
         case 'settings':
           await flow.openSettings();
           return 'ok';

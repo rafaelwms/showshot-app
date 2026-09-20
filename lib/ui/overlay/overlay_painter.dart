@@ -222,7 +222,7 @@ class OverlayPainter extends CustomPainter {
     canvas.drawRRect(
       RRect.fromRectAndRadius(rect, const Radius.circular(7)),
       Paint()
-        ..color = AppColors.border
+        ..color = const Color(0x1AFFFFFF)
         ..style = PaintingStyle.stroke,
     );
     painter.paint(canvas, origin + Offset(pad + 1, pad - 1));

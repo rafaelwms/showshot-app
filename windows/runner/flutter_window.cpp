@@ -4,6 +4,12 @@
 
 #include "flutter/generated_plugin_registrant.h"
 
+// Not declared in every SDK version's winuser.h; DWM broadcasts it whenever
+// the user changes their accent color in Settings > Personalization.
+#ifndef WM_DWMCOLORIZATIONCOLORCHANGED
+#define WM_DWMCOLORIZATIONCOLORCHANGED 0x0320
+#endif
+
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
     : project_(project) {}
 
@@ -67,6 +73,10 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
   switch (message) {
     case WM_FONTCHANGE:
       flutter_controller_->engine()->ReloadSystemFonts();
+      break;
+    case WM_SETTINGCHANGE:
+    case WM_DWMCOLORIZATIONCOLORCHANGED:
+      if (shoshot_native_) shoshot_native_->OnSystemAccentMaybeChanged();
       break;
   }
 

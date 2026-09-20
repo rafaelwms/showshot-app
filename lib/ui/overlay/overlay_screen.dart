@@ -473,7 +473,7 @@ class _OverlayScreenState extends State<OverlayScreen> {
               decoration: BoxDecoration(
                 color: const Color(0xE6161A2B),
                 borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: AppColors.border),
+                border: Border.all(color: context.palette.border),
               ),
               child: Text(
                 '$px, $py',
@@ -503,7 +503,7 @@ class _OverlayScreenState extends State<OverlayScreen> {
           width: 30,
           height: 30,
           decoration: BoxDecoration(
-            gradient: AppColors.accentGradient,
+            gradient: context.palette.accentGradient,
             shape: BoxShape.circle,
             border: Border.all(
               color: Colors.white.withValues(alpha: 0.85),
@@ -573,8 +573,8 @@ class _OverlayScreenState extends State<OverlayScreen> {
                     _dot(),
                     Text(
                       secondary,
-                      style: const TextStyle(
-                        color: AppColors.textMuted,
+                      style: TextStyle(
+                        color: context.palette.textMuted,
                         fontSize: 12.5,
                       ),
                     ),
@@ -584,8 +584,8 @@ class _OverlayScreenState extends State<OverlayScreen> {
                   const SizedBox(width: 6),
                   Text(
                     strings.hintSpace,
-                    style: const TextStyle(
-                      color: AppColors.textMuted,
+                    style: TextStyle(
+                      color: context.palette.textMuted,
                       fontSize: 12.5,
                     ),
                   ),
@@ -594,8 +594,8 @@ class _OverlayScreenState extends State<OverlayScreen> {
                   const SizedBox(width: 6),
                   Text(
                     strings.hintEsc,
-                    style: const TextStyle(
-                      color: AppColors.textMuted,
+                    style: TextStyle(
+                      color: context.palette.textMuted,
                       fontSize: 12.5,
                     ),
                   ),
@@ -608,9 +608,9 @@ class _OverlayScreenState extends State<OverlayScreen> {
     );
   }
 
-  Widget _dot() => const Padding(
+  Widget _dot() => Padding(
     padding: EdgeInsets.symmetric(horizontal: 10),
-    child: Text('·', style: TextStyle(color: AppColors.textFaint)),
+    child: Text('·', style: TextStyle(color: context.palette.textFaint)),
   );
 
   Widget _buildActionBar(Strings strings, Size size) {
@@ -668,7 +668,7 @@ class _OverlayScreenState extends State<OverlayScreen> {
               width: 1,
               height: 22,
               margin: const EdgeInsets.symmetric(horizontal: 6),
-              color: AppColors.borderStrong,
+              color: context.palette.borderStrong,
             ),
             ToolButton(
               icon: Icons.brush_rounded,

@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../../core/app_scope.dart';
 import '../../core/strings.dart';
 import '../../core/theme.dart';
+import '../../debug/debug_server.dart';
 import '../../models/app_settings.dart';
 import '../../models/capture_mode.dart';
 import '../../services/export_service.dart';
@@ -25,9 +26,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void initState() {
     super.initState();
+    DebugHooks.settingsBack = _goBack;
     ExportService.defaultDirectory().then((dir) {
       if (mounted) setState(() => _defaultDir = dir.path);
     });
+  }
+
+  @override
+  void dispose() {
+    if (DebugHooks.settingsBack == _goBack) DebugHooks.settingsBack = null;
+    super.dispose();
+  }
+
+  // Settings opened from within the app (the Home gear icon) sits on top of
+  // a Home route to pop back to. Opened directly (tray menu →
+  // "Configurações…") it is the only route on the stack, so there is
+  // nothing to pop — `maybePop` would silently do nothing there.
+  void _goBack() {
+    final navigator = Navigator.of(context);
+    if (navigator.canPop()) {
+      navigator.pop();
+    } else {
+      AppScope.of(context).flow.showHome();
+    }
   }
 
   void _onRecordingChanged(bool recording) {
@@ -67,7 +88,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 leading: ToolButton(
                   icon: Icons.arrow_back_rounded,
                   tooltip: strings.back,
-                  onPressed: () => Navigator.of(context).maybePop(),
+                  onPressed: _goBack,
                 ),
                 title: Text(strings.settings),
               ),
@@ -195,7 +216,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                       ),
                                       label: Text(strings.resetDefaults),
                                       style: TextButton.styleFrom(
-                                        foregroundColor: AppColors.textMuted,
+                                        foregroundColor:
+                                            context.palette.textMuted,
                                       ),
                                     ),
                                   ),
@@ -211,11 +233,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                       style: SegmentedButton.styleFrom(
                                         visualDensity: VisualDensity.compact,
                                         selectedBackgroundColor:
-                                            AppColors.violet,
+                                            context.palette.accentStart,
                                         selectedForegroundColor: Colors.white,
-                                        foregroundColor: AppColors.textMuted,
-                                        side: const BorderSide(
-                                          color: AppColors.borderStrong,
+                                        foregroundColor:
+                                            context.palette.textMuted,
+                                        side: BorderSide(
+                                          color: context.palette.borderStrong,
                                         ),
                                       ),
                                       segments: const [
@@ -294,7 +317,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                               Icons.restart_alt_rounded,
                                               size: 18,
                                             ),
-                                            color: AppColors.textMuted,
+                                            color: context.palette.textMuted,
                                           ),
                                       ],
                                     ),
@@ -342,8 +365,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                             ),
                                             Text(
                                               '${strings.version} 1.0.0 · ${strings.madeBy}',
-                                              style: const TextStyle(
-                                                color: AppColors.textMuted,
+                                              style: TextStyle(
+                                                color:
+                                                    context.palette.textMuted,
                                                 fontSize: 12.5,
                                               ),
                                             ),
@@ -410,9 +434,9 @@ class _Section extends StatelessWidget {
           ),
           Container(
             decoration: BoxDecoration(
-              color: AppColors.surface,
+              color: context.palette.surface,
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppColors.border),
+              border: Border.all(color: context.palette.border),
             ),
             padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
             child: Column(
@@ -432,8 +456,8 @@ class _Section extends StatelessWidget {
               padding: const EdgeInsets.only(left: 4, top: 8),
               child: Text(
                 footer!,
-                style: const TextStyle(
-                  color: AppColors.textFaint,
+                style: TextStyle(
+                  color: context.palette.textFaint,
                   fontSize: 12,
                 ),
               ),
@@ -475,8 +499,8 @@ class _SettingRow extends StatelessWidget {
                   padding: const EdgeInsets.only(top: 2),
                   child: Text(
                     subtitle!,
-                    style: const TextStyle(
-                      color: AppColors.textMuted,
+                    style: TextStyle(
+                      color: context.palette.textMuted,
                       fontSize: 12.5,
                     ),
                   ),
@@ -507,21 +531,21 @@ class _Dropdown<T> extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
-        color: AppColors.surfaceRaised,
+        color: context.palette.surfaceRaised,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.borderStrong),
+        border: Border.all(color: context.palette.borderStrong),
       ),
       child: DropdownButton<T>(
         value: value,
         underline: const SizedBox.shrink(),
-        dropdownColor: AppColors.surfaceRaised,
+        dropdownColor: context.palette.surfaceRaised,
         borderRadius: BorderRadius.circular(12),
-        style: const TextStyle(
-          color: AppColors.text,
+        style: TextStyle(
+          color: context.palette.text,
           fontSize: 13,
           fontWeight: FontWeight.w600,
         ),
-        iconEnabledColor: AppColors.textMuted,
+        iconEnabledColor: context.palette.textMuted,
         isDense: true,
         items: [
           for (final entry in items.entries)

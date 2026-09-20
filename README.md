@@ -148,7 +148,7 @@ Comandos: `capture area|window|fullScreen`, `select x y w h`, `hover x y`, `wind
 `color AARRGGBB`, `style <espessura> <opacidade> [fill]`, `undo`,
 `action save|saveAs|copy|discard`,
 `setting ask|copyAfterSave|magnifier|jpg|language true|false|<valor>`, `home`, `settings`,
-`hide`, `close`, `stage`, `quit`.
+`hide`, `close`, `stage`, `settingsBack`, `quit`.
 
 ---
 

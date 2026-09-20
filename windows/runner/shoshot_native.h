@@ -36,7 +36,15 @@ class ShoShotNative {
   bool SetClipboardImage(const std::vector<uint8_t>& png,
                          const std::vector<uint8_t>& rgba, int width,
                          int height);
+  int64_t CurrentAccentArgb();
 
+ public:
+  // Called by FlutterWindow::MessageHandler on WM_SETTINGCHANGE /
+  // WM_DWMCOLORIZATIONCOLORCHANGED — pushes the current accent color to
+  // Dart if it actually changed since the last read.
+  void OnSystemAccentMaybeChanged();
+
+ private:
   HWND hwnd_;
   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> channel_;
 
@@ -45,6 +53,8 @@ class ShoShotNative {
   LONG_PTR saved_style_ = 0;
   LONG_PTR saved_exstyle_ = 0;
   HMONITOR overlay_monitor_ = nullptr;
+
+  int64_t last_accent_argb_ = 0;
 };
 
 #endif  // RUNNER_SHOSHOT_NATIVE_H_

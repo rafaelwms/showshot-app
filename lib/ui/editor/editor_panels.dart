@@ -114,7 +114,7 @@ class _RailButton extends StatelessWidget {
             width: 38,
             height: 38,
             decoration: BoxDecoration(
-              gradient: active ? AppColors.accentGradient : null,
+              gradient: active ? context.palette.accentGradient : null,
               borderRadius: BorderRadius.circular(10),
             ),
             child: Transform.rotate(
@@ -122,7 +122,7 @@ class _RailButton extends StatelessWidget {
               child: Icon(
                 spec.icon,
                 size: 19,
-                color: active ? Colors.white : AppColors.textMuted,
+                color: active ? Colors.white : context.palette.textMuted,
               ),
             ),
           ),
@@ -141,7 +141,7 @@ class _RailDivider extends StatelessWidget {
       width: 22,
       height: 1,
       margin: const EdgeInsets.symmetric(vertical: 5),
-      color: AppColors.borderStrong,
+      color: context.palette.borderStrong,
     );
   }
 }
@@ -270,7 +270,7 @@ class _BarDivider extends StatelessWidget {
       width: 1,
       height: 22,
       margin: const EdgeInsets.symmetric(horizontal: 10),
-      color: AppColors.borderStrong,
+      color: context.palette.borderStrong,
     );
   }
 }
@@ -415,7 +415,7 @@ class _LabeledSlider extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 16, color: AppColors.textMuted),
+          Icon(icon, size: 16, color: context.palette.textMuted),
           SizedBox(
             width: 110,
             child: Slider(
@@ -429,9 +429,9 @@ class _LabeledSlider extends StatelessWidget {
             width: 34,
             child: Text(
               display,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 11.5,
-                color: AppColors.textMuted,
+                color: context.palette.textMuted,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -479,10 +479,10 @@ class ZoomControls extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(vertical: 6),
                 child: Text(
                   '${(controller.zoom * 100).round()}%',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
-                    color: AppColors.textMuted,
+                    color: context.palette.textMuted,
                   ),
                 ),
               ),
@@ -558,7 +558,7 @@ class _ColorPickerDialogState extends State<_ColorPickerDialog> {
                   decoration: BoxDecoration(
                     color: color,
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: AppColors.borderStrong),
+                    border: Border.all(color: context.palette.borderStrong),
                   ),
                 ),
                 const SizedBox(width: 10),

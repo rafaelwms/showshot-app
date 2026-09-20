@@ -288,11 +288,11 @@ class _EditorScreenState extends State<EditorScreen> {
               children: [
                 Positioned.fill(
                   child: Container(
-                    decoration: const BoxDecoration(
+                    decoration: BoxDecoration(
                       gradient: RadialGradient(
-                        center: Alignment(0, -0.4),
+                        center: const Alignment(0, -0.4),
                         radius: 1.4,
-                        colors: [Color(0xFF181C2E), AppColors.bg],
+                        colors: [context.palette.surface, context.palette.bg],
                       ),
                     ),
                     child: Padding(
@@ -351,7 +351,7 @@ class _EditorScreenState extends State<EditorScreen> {
   Widget _buildTitleBar(EditorController controller, Strings strings) {
     final command = Platform.isMacOS ? '⌘' : 'Ctrl+';
     return Container(
-      color: AppColors.bg.withValues(alpha: 0.85),
+      color: context.palette.bg.withValues(alpha: 0.85),
       child: WindowTitleBar(
         onClose: _discard,
         leading: const BrandMark(size: 20),
@@ -378,9 +378,9 @@ class _EditorScreenState extends State<EditorScreen> {
             const SizedBox(width: 6),
             PopupMenuButton<String>(
               tooltip: '',
-              icon: const Icon(
+              icon: Icon(
                 Icons.more_horiz_rounded,
-                color: AppColors.textMuted,
+                color: context.palette.textMuted,
                 size: 20,
               ),
               onSelected: (value) {

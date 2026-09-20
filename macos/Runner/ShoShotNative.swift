@@ -31,6 +31,7 @@ final class ShoShotNative: NSObject {
     channel.setMethodCallHandler { [weak self] call, result in
       self?.handle(call, result: result)
     }
+    observeSystemAccent()
     // Backs the `launch_at_startup` package using SMAppService (macOS 13+).
     launchChannel = FlutterMethodChannel(name: "launch_at_startup", binaryMessenger: messenger)
     launchChannel.setMethodCallHandler { call, result in
@@ -110,9 +111,41 @@ final class ShoShotNative: NSObject {
         NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
       }
       result(nil)
+    case "getSystemAccent":
+      result(currentAccentARGB())
     default:
       result(FlutterMethodNotImplemented)
     }
+  }
+
+  // MARK: - System accent color
+
+  /// `NSColor.controlAccentColor` as a 0xAARRGGBB int for Flutter's `Color`.
+  private func currentAccentARGB() -> Int {
+    let rgb = NSColor.controlAccentColor.usingColorSpace(.deviceRGB) ?? NSColor(
+      deviceRed: 124.0 / 255, green: 92.0 / 255, blue: 255.0 / 255, alpha: 1)
+    let r = Int((rgb.redComponent * 255).rounded())
+    let g = Int((rgb.greenComponent * 255).rounded())
+    let b = Int((rgb.blueComponent * 255).rounded())
+    return (0xFF << 24) | (r << 16) | (g << 8) | b
+  }
+
+  /// The user can change their accent color while the app is running; macOS
+  /// announces that (and light/dark switches) via distributed notifications
+  /// rather than a delegate callback, so we listen for both and re-push
+  /// whenever either fires — cheaper than diffing, and accent reads are
+  /// trivial.
+  private func observeSystemAccent() {
+    let center = DistributedNotificationCenter.default()
+    let handler: (Notification) -> Void = { [weak self] _ in
+      self?.pushSystemAccent()
+    }
+    center.addObserver(forName: NSNotification.Name("AppleColorPreferencesChangedNotification"), object: nil, queue: .main, using: handler)
+    center.addObserver(forName: NSNotification.Name("AppleInterfaceThemeChangedNotification"), object: nil, queue: .main, using: handler)
+  }
+
+  private func pushSystemAccent() {
+    channel.invokeMethod("systemAccentChanged", arguments: currentAccentARGB())
   }
 
   // MARK: - Displays

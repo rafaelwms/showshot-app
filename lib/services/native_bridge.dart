@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import '../models/display_info.dart';
+import '../models/system_theme.dart';
 import '../models/window_info.dart';
 
 /// Raw pixels of a captured display.
@@ -58,13 +59,29 @@ class NativePlatformInfo {
 /// Thin typed wrapper around the `shoshot/native` method channel implemented
 /// in each platform runner.
 class NativeBridge {
-  NativeBridge._();
+  NativeBridge._() {
+    _channel.setMethodCallHandler(_handleIncoming);
+  }
 
   static final NativeBridge instance = NativeBridge._();
 
   static const _channel = MethodChannel('shoshot/native');
 
   NativePlatformInfo? _info;
+
+  /// Set by [SystemThemeService]: called whenever the native side pushes an
+  /// `systemAccentChanged` notification (the user changed their accent
+  /// color in System Settings while the app was running).
+  void Function(SystemAccent accent)? onSystemAccentChanged;
+
+  Future<void> _handleIncoming(MethodCall call) async {
+    if (call.method == 'systemAccentChanged') {
+      final argb = (call.arguments as num?)?.toInt();
+      if (argb != null) {
+        onSystemAccentChanged?.call(SystemAccent(ui.Color(argb)));
+      }
+    }
+  }
 
   Future<NativePlatformInfo> platformInfo() async {
     if (_info != null) return _info!;
@@ -181,4 +198,15 @@ class NativeBridge {
 
   Future<void> revealFile(String path) =>
       _channel.invokeMethod('revealFile', {'path': path});
+
+  /// Reads the OS accent color once. Returns null where unsupported (the
+  /// caller should keep [SystemAccent.fallback]).
+  Future<SystemAccent?> getSystemAccent() async {
+    try {
+      final argb = await _channel.invokeMethod<int>('getSystemAccent');
+      return argb == null ? null : SystemAccent(ui.Color(argb));
+    } on MissingPluginException {
+      return null;
+    }
+  }
 }

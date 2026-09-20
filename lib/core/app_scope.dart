@@ -6,6 +6,7 @@ import '../services/hotkey_service.dart';
 import '../services/native_bridge.dart';
 import '../services/settings_service.dart';
 import '../services/startup_service.dart';
+import '../services/system_theme_service.dart';
 import '../services/tray_service.dart';
 
 /// Bag of long-lived services shared across the widget tree.
@@ -18,6 +19,7 @@ class AppServices {
     required this.startup,
     required this.native,
     required this.export,
+    required this.systemTheme,
   });
 
   final SettingsService settings;
@@ -27,6 +29,7 @@ class AppServices {
   final StartupService startup;
   final NativeBridge native;
   final ExportService export;
+  final SystemThemeService systemTheme;
 }
 
 class AppScope extends InheritedWidget {

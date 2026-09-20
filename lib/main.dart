@@ -14,6 +14,7 @@ import 'services/hotkey_service.dart';
 import 'services/native_bridge.dart';
 import 'services/settings_service.dart';
 import 'services/startup_service.dart';
+import 'services/system_theme_service.dart';
 import 'services/tray_service.dart';
 
 Future<void> main(List<String> args) async {
@@ -40,6 +41,10 @@ Future<void> main(List<String> args) async {
     onQuit: flow.quit,
   );
   final startup = StartupService(settings);
+  final systemTheme = SystemThemeService(native);
+  // Read before the first frame so the app never flashes the fallback
+  // accent color before swapping to the real OS one.
+  await systemTheme.init();
 
   final startHidden =
       args.contains(StartupService.launchArg) || args.contains('--hidden');
@@ -68,6 +73,7 @@ Future<void> main(List<String> args) async {
     startup: startup,
     native: native,
     export: export,
+    systemTheme: systemTheme,
   );
   runApp(ShoShotApp(services: services));
 
