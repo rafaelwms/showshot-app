@@ -166,7 +166,12 @@ class _CaptureColumn extends StatelessWidget {
             hotKeyText: hotKeyLabel(settings.hotKeys[mode]),
             hotKeyFailed: services.hotkeys.failed.contains(mode),
             enabled: !flow.busy,
-            onTap: () => flow.start(mode),
+            onTap: () {
+              debugPrint(
+                'DIAG: card tapped mode=$mode busy=${flow.busy} stage=${flow.stage}',
+              );
+              flow.start(mode);
+            },
           ),
           const SizedBox(height: 10),
         ],
@@ -257,6 +262,7 @@ class _CaptureCardState extends State<_CaptureCard> {
   @override
   Widget build(BuildContext context) {
     final strings = Strings.of(context);
+    debugPrint('DIAG: _CaptureCard(${widget.mode}) build enabled=${widget.enabled}');
     return MouseRegion(
       onEnter: (_) => setState(() => _hover = true),
       onExit: (_) => setState(() => _hover = false),
@@ -264,6 +270,7 @@ class _CaptureCardState extends State<_CaptureCard> {
           ? SystemMouseCursors.click
           : SystemMouseCursors.basic,
       child: GestureDetector(
+        onTapDown: (_) => debugPrint('DIAG: _CaptureCard(${widget.mode}) onTapDown enabled=${widget.enabled}'),
         onTap: widget.enabled ? widget.onTap : null,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),

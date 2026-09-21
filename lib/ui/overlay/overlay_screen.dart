@@ -361,7 +361,7 @@ class _OverlayScreenState extends State<OverlayScreen> {
     final session = services.flow.session;
     final strings = Strings.of(context);
     if (session == null) {
-      return const ColoredBox(color: Colors.black);
+      return const Scaffold(backgroundColor: Colors.black);
     }
     final showMagnifier = services.settings.settings.showMagnifier;
     final dragging = _drag != null;
@@ -374,63 +374,73 @@ class _OverlayScreenState extends State<OverlayScreen> {
             _drag == _DragKind.create ||
             _drag == _DragKind.resize);
 
-    return Focus(
-      focusNode: _focusNode,
-      autofocus: true,
-      onKeyEvent: _onKey,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final size = constraints.biggest;
-          return MouseRegion(
-            cursor: _cursorFor(_cursor),
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                // Pointer handling lives on its own layer, below the floating
-                // UI (action bar, hint, magnifier). A `Listener` reports every
-                // raw pointer event that lands within its bounds even when a
-                // descendant widget (like a toolbar button) already handled
-                // it — so the toolbar must be a *sibling*, not a child, or
-                // every click on it would also start a new selection here.
-                Listener(
-                  behavior: HitTestBehavior.opaque,
-                  onPointerHover: _onHover,
-                  onPointerDown: _onDown,
-                  onPointerMove: _onMove,
-                  onPointerUp: _onUp,
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      RepaintBoundary(
-                        child: RawImage(
-                          image: session.image,
-                          fit: BoxFit.fill,
-                          filterQuality: FilterQuality.none,
+    // Every other screen in the app renders inside a `Scaffold`; this one
+    // didn't, which turned out to matter — without it, macOS underlines
+    // every piece of text in this window in red/yellow (see the "second
+    // capture" / underline investigation in CLAUDE.md). Wrapping the whole
+    // thing here, rather than changing what's inside, keeps the fix in one
+    // place and matches how every other screen is structured.
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Focus(
+        focusNode: _focusNode,
+        autofocus: true,
+        onKeyEvent: _onKey,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final size = constraints.biggest;
+            return MouseRegion(
+              cursor: _cursorFor(_cursor),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  // Pointer handling lives on its own layer, below the floating
+                  // UI (action bar, hint, magnifier). A `Listener` reports every
+                  // raw pointer event that lands within its bounds even when a
+                  // descendant widget (like a toolbar button) already handled
+                  // it — so the toolbar must be a *sibling*, not a child, or
+                  // every click on it would also start a new selection here.
+                  Listener(
+                    behavior: HitTestBehavior.opaque,
+                    onPointerHover: _onHover,
+                    onPointerDown: _onDown,
+                    onPointerMove: _onMove,
+                    onPointerUp: _onUp,
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        RepaintBoundary(
+                          child: RawImage(
+                            image: session.image,
+                            fit: BoxFit.fill,
+                            filterQuality: FilterQuality.none,
+                          ),
                         ),
-                      ),
-                      CustomPaint(
-                        painter: OverlayPainter(
-                          selection: _selection,
-                          hoverWindow: _hoverWindow,
-                          cursor: _cursor,
-                          pixelRatio: session.pixelRatio,
-                          dragging: dragging,
-                          showHandles: _selection != null && !dragging,
-                          showCrosshair: !isWindowPickPhase,
+                        CustomPaint(
+                          painter: OverlayPainter(
+                            selection: _selection,
+                            hoverWindow: _hoverWindow,
+                            cursor: _cursor,
+                            pixelRatio: session.pixelRatio,
+                            dragging: dragging,
+                            showHandles: _selection != null && !dragging,
+                            showCrosshair: !isWindowPickPhase,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-                if (magnifierVisible) _buildMagnifier(session, size),
-                if (isWindowPickPhase && _cursor != null) _buildCameraCursor(),
-                _buildHint(strings, session.mode, size),
-                if (_selection != null && !dragging)
-                  _buildActionBar(strings, size),
-              ],
-            ),
-          );
-        },
+                  if (magnifierVisible) _buildMagnifier(session, size),
+                  if (isWindowPickPhase && _cursor != null)
+                    _buildCameraCursor(),
+                  _buildHint(strings, session.mode, size),
+                  if (_selection != null && !dragging)
+                    _buildActionBar(strings, size),
+                ],
+              ),
+            );
+          },
+        ),
       ),
     );
   }

@@ -159,27 +159,38 @@ class CaptureFlow extends ChangeNotifier with WindowListener {
       await showHome();
     } finally {
       _busy = false;
+      notifyListeners();
     }
   }
 
   Future<void> completeOverlay(OverlayResult result) async {
+    debugPrint('DIAG: completeOverlay entered action=${result.action} stage=$_stage session=${_session != null}');
     final session = _session;
-    if (session == null || _stage != FlowStage.overlay) return;
+    if (session == null || _stage != FlowStage.overlay) {
+      debugPrint('DIAG: completeOverlay early-return guard');
+      return;
+    }
     _busy = true;
     try {
       // Hide before restoring the window style so the user never sees the
       // overlay collapse into a regular window.
+      debugPrint('DIAG: before windowManager.hide()');
       await windowManager.hide();
+      debugPrint('DIAG: after windowManager.hide(), before _showBlank()');
       await _showBlank();
+      debugPrint('DIAG: after _showBlank(), before native.exitOverlay()');
       final size = _editorWindowSize(session.image, session);
       await native.exitOverlay(width: size.width, height: size.height);
+      debugPrint('DIAG: after native.exitOverlay()');
 
       final rect = result.rect ?? session.logicalRect;
       switch (result.action) {
         case OverlayAction.cancel:
           _disposeSession();
           _setStage(FlowStage.idle);
+          debugPrint('DIAG: before _finish() [cancel]');
           await _finish();
+          debugPrint('DIAG: after _finish() [cancel]');
         case OverlayAction.edit:
           final image = await session.crop(rect);
           await _openEditor(image, session);
@@ -212,7 +223,10 @@ class CaptureFlow extends ChangeNotifier with WindowListener {
       _setStage(FlowStage.idle);
       await showHome();
     } finally {
+      debugPrint('DIAG: completeOverlay finally -> setting _busy=false + notifyListeners()');
       _busy = false;
+      notifyListeners();
+      debugPrint('DIAG: completeOverlay finally done, _busy=$_busy');
     }
   }
 
@@ -240,6 +254,7 @@ class CaptureFlow extends ChangeNotifier with WindowListener {
   }
 
   Future<void> showHome({String route = '/'}) async {
+    debugPrint('DIAG: showHome entered route=$route stage=$_stage busy=$_busy');
     if (_stage == FlowStage.overlay) return;
     if (_stage == FlowStage.editor) {
       // Keep the editor; just bring the window up.
@@ -252,6 +267,7 @@ class CaptureFlow extends ChangeNotifier with WindowListener {
       navigator.pushNamedAndRemoveUntil(route, (_) => false);
       await _settle();
     }
+    debugPrint('DIAG: showHome mid, before isVisible check, busy=$_busy');
     if (!await windowManager.isVisible()) {
       await windowManager.setSize(homeSize);
       await windowManager.center();
@@ -260,6 +276,7 @@ class CaptureFlow extends ChangeNotifier with WindowListener {
     await windowManager.focus();
     _returnToHome = false;
     notifyListeners();
+    debugPrint('DIAG: showHome done, busy=$_busy stage=$_stage');
   }
 
   Future<void> openSettings() => showHome(route: '/settings');

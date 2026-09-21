@@ -105,10 +105,18 @@ flutter pub get
 
 ### Windows
 
-- Visual Studio 2022 com a carga de trabalho *Desktop development with C++*.
+- É preciso do toolchain MSVC + Windows SDK — não do .NET SDK, e não
+  necessariamente do app Visual Studio. Duas formas de conseguir:
+  - **Visual Studio 2022** (Community serve) com a carga de trabalho *Desktop
+    development with C++*; ou
+  - **[Build Tools for Visual Studio 2022](https://visualstudio.microsoft.com/downloads/)**
+    (instalador avulso, sem a IDE) com a mesma carga de trabalho — use este se
+    for editar em outro lugar (Rider, VS Code etc.). Funciona nativamente em
+    Windows ARM64 também.
+  - Confirme com `flutter doctor -v`: precisa aparecer `[✓]` em "Visual Studio".
 - `flutter run -d windows` ou `flutter build windows --release`.
-- O executável fica em `build/windows/x64/runner/Release/`. Para distribuir, empacote a
-  pasta inteira (ou use MSIX/Inno Setup).
+- O executável fica em `build/windows/x64/runner/Release/` (ou `arm64/` em hosts
+  ARM64). Para distribuir, empacote a pasta inteira (ou use MSIX/Inno Setup).
 
 ### Linux
 
