@@ -77,8 +77,20 @@ class _HomeScreenState extends State<HomeScreen> {
                   return LayoutBuilder(
                     builder: (context, constraints) {
                       final wide = constraints.maxWidth >= 860;
-                      const left = _CaptureColumn();
-                      const right = _RecentColumn();
+                      // Not `const`: these read mutable state (AppScope's
+                      // flow/settings/hotkeys) in their own build() methods.
+                      // A `const` instance here is canonicalized to the same
+                      // object every time, so once this LayoutBuilder itself
+                      // updates an *already-mounted* element (as opposed to a
+                      // fresh one from a route push), Flutter's reconciler
+                      // sees `child.widget == newWidget` and skips calling
+                      // build() again entirely — freezing whatever `enabled`/
+                      // etc. the card had at first mount, even though
+                      // ListenableBuilder above is still firing correctly.
+                      // That's exactly what caused capture buttons to read
+                      // `flow.busy` as permanently stuck.
+                      final left = _CaptureColumn();
+                      final right = _RecentColumn();
                       return Padding(
                         padding: const EdgeInsets.fromLTRB(28, 8, 28, 24),
                         child: wide
@@ -87,7 +99,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 children: [
                                   Expanded(flex: 11, child: left),
                                   const SizedBox(width: 28),
-                                  const Expanded(flex: 8, child: right),
+                                  Expanded(flex: 8, child: right),
                                 ],
                               )
                             : SingleChildScrollView(
@@ -166,12 +178,7 @@ class _CaptureColumn extends StatelessWidget {
             hotKeyText: hotKeyLabel(settings.hotKeys[mode]),
             hotKeyFailed: services.hotkeys.failed.contains(mode),
             enabled: !flow.busy,
-            onTap: () {
-              debugPrint(
-                'DIAG: card tapped mode=$mode busy=${flow.busy} stage=${flow.stage}',
-              );
-              flow.start(mode);
-            },
+            onTap: () => flow.start(mode),
           ),
           const SizedBox(height: 10),
         ],
@@ -262,7 +269,6 @@ class _CaptureCardState extends State<_CaptureCard> {
   @override
   Widget build(BuildContext context) {
     final strings = Strings.of(context);
-    debugPrint('DIAG: _CaptureCard(${widget.mode}) build enabled=${widget.enabled}');
     return MouseRegion(
       onEnter: (_) => setState(() => _hover = true),
       onExit: (_) => setState(() => _hover = false),
@@ -270,7 +276,6 @@ class _CaptureCardState extends State<_CaptureCard> {
           ? SystemMouseCursors.click
           : SystemMouseCursors.basic,
       child: GestureDetector(
-        onTapDown: (_) => debugPrint('DIAG: _CaptureCard(${widget.mode}) onTapDown enabled=${widget.enabled}'),
         onTap: widget.enabled ? widget.onTap : null,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
