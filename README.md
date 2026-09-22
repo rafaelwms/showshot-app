@@ -18,7 +18,7 @@ Site: <https://showshot.rafaelwms.com>
 | --- | --- |
 | **Captura** | Área selecionada, janela específica (clique), tela inteira ou texto (OCR). A tela é congelada no momento do disparo — pelo atalho ou pelo menu do tray. |
 | **Overlay de seleção** | Escurecimento fora da seleção, destaque automático da janela sob o cursor, lupa de precisão com coordenadas, handles de redimensionamento, guias de terços, tamanho em pixels, atalhos (`Space` tela inteira, `Enter` confirma, `Esc` cancela, setas movem 1px / `Shift`+setas 10px, `⌘/Ctrl+C` copia, `⌘/Ctrl+S` salva, `⌘/Ctrl+E` edita, `⌘/Ctrl+T` extrai texto). |
-| **Texto (OCR)** | Reconhece o texto de uma seleção e copia direto para a área de transferência. macOS usa o framework Vision (on-device, sem configuração); Linux tenta `tesseract` se estiver instalado; Windows ainda não tem OCR nativo implementado (ver "Limitações"). |
+| **Texto (OCR)** | Reconhece o texto de uma seleção e copia direto para a área de transferência. macOS usa o framework Vision e Windows usa `Windows.Media.Ocr` (ambos on-device, sem configuração); Linux tenta `tesseract` se estiver instalado. |
 | **Editor** | Seta, linha, retângulo, elipse, caneta, marcador, texto, numeração de passos, desfoque, **extrair texto** (arrasta uma região e reconhece só o que está nela); seleção/mover/redimensionar; paleta + cor personalizada (HSV/hex); espessura, transparência, preenchimento, tamanho de fonte; desfazer/refazer; zoom (roda do mouse, pinça, `⌘/Ctrl +/-/0/1`), pan (ferramenta mão ou `Espaço`). |
 | **Saída** | Copiar para a área de transferência (PNG + bitmap nativo), salvar PNG/JPG com diálogo ou direto na pasta padrão (`Imagens/ShowShot`), copiar ao salvar, lista de capturas recentes. |
 | **Sistema** | Ícone na barra de menu (macOS/Linux) e tray (Windows), atalhos globais configuráveis, iniciar com o sistema, ocultar/mostrar ícone no Dock (macOS), idioma PT/EN automático. |
@@ -170,12 +170,10 @@ Comandos: `capture area|window|fullScreen|text`, `select x y w h`, `hover x y`, 
 
 - O overlay cobre apenas o display sob o cursor (múltiplos monitores são suportados um por
   vez).
-- Windows e Linux foram escritos contra as APIs oficiais, mas o build nativo destas
-  plataformas ainda precisa ser validado em máquinas reais.
-- OCR (captura de Texto) só está implementado de verdade no macOS (framework Vision) e,
-  quando disponível, via `tesseract` no Linux. No Windows, `recognizeText` ainda não tem
-  implementação nativa — a captura de texto simplesmente não encontra texto até alguém
-  implementar `Windows.Media.Ocr` lá (precisa de C++/WinRT, que este projeto não usa hoje;
-  não dá para validar isso via o toolchain mingw usado neste repositório).
+- Windows está validado em hardware real (x64 e arm64), incluindo OCR. Linux ainda foi
+  escrito contra as APIs oficiais mas segue sem validação em máquina real.
+- OCR (captura de Texto) está implementado de verdade no macOS (framework Vision) e no
+  Windows (`Windows.Media.Ocr`, via C++/WinRT). No Linux, depende de `tesseract` estar
+  instalado no sistema.
 - Ideias futuras: gravação de vídeo/GIF, upload para a nuvem com link curto, pixelização
   além do desfoque, crop no editor, histórico de capturas com busca.
