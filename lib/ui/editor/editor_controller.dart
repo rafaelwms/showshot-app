@@ -13,16 +13,32 @@ enum _DragKind { draw, move, handle }
 /// All geometry is in image pixel coordinates; the view maps pointer events
 /// through [transformation].
 class EditorController extends ChangeNotifier {
-  EditorController({required this.image, required this.pixelRatio})
-    : _style = AnnotationStyle(
-        color: AppColors.palette.first,
-        strokeWidth: (3 * pixelRatio).roundToDouble(),
-        fontSize: (20 * pixelRatio).roundToDouble(),
-      );
+  EditorController({
+    required this.image,
+    required this.pixelRatio,
+    this.onOcrRegion,
+  }) : _style = AnnotationStyle(
+         color: AppColors.palette.first,
+         strokeWidth: (3 * pixelRatio).roundToDouble(),
+         fontSize: (20 * pixelRatio).roundToDouble(),
+       ),
+       _ocrDraftStyle = AnnotationStyle(
+         color: AppColors.cyan,
+         strokeWidth: (2 * pixelRatio).roundToDouble(),
+       );
 
   final ui.Image image;
   final double pixelRatio;
   final transformation = TransformationController();
+
+  /// Called with the selected region (image pixel coordinates) when the
+  /// user finishes an [ToolType.ocr] drag. The screen owns recognizing and
+  /// copying the text — the controller only reports *where*.
+  final void Function(Rect rect)? onOcrRegion;
+
+  /// Fixed look for the OCR selection rectangle, independent of the user's
+  /// current annotation style — it's a selection, not a drawn shape.
+  final AnnotationStyle _ocrDraftStyle;
 
   static const maxHistory = 100;
 
@@ -244,6 +260,18 @@ class EditorController extends ChangeNotifier {
         _drag = _DragKind.draw;
         _dragStart = p;
         notifyListeners();
+      case ToolType.ocr:
+        commitTextEditing();
+        _draft = ShapeAnnotation(
+          id: newAnnotationId(),
+          style: _ocrDraftStyle,
+          kind: ShapeKind.rect,
+          start: p,
+          end: p,
+        );
+        _drag = _DragKind.draw;
+        _dragStart = p;
+        notifyListeners();
     }
   }
 
@@ -319,8 +347,13 @@ class EditorController extends ChangeNotifier {
         final draft = _draft;
         _draft = null;
         if (draft != null && !draft.isDegenerate) {
-          _pushHistory();
-          _annotations = [..._annotations, draft];
+          if (_tool == ToolType.ocr && draft is ShapeAnnotation) {
+            // Not an annotation: report the region and leave nothing behind.
+            onOcrRegion?.call(draft.rect);
+          } else {
+            _pushHistory();
+            _annotations = [..._annotations, draft];
+          }
         }
       case _DragKind.move:
       case _DragKind.handle:

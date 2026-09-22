@@ -33,6 +33,7 @@ const _tools = <_ToolSpec>[
   _ToolSpec(ToolType.text, Icons.title_rounded, 'T'),
   _ToolSpec(ToolType.number, Icons.pin_rounded, 'N'),
   _ToolSpec(ToolType.blur, Icons.blur_on_rounded, 'B'),
+  _ToolSpec(ToolType.ocr, Icons.text_fields_rounded, 'O'),
 ];
 
 String toolName(Strings strings, ToolType tool) => switch (tool) {
@@ -47,6 +48,7 @@ String toolName(Strings strings, ToolType tool) => switch (tool) {
   ToolType.text => strings.toolText,
   ToolType.number => strings.toolNumber,
   ToolType.blur => strings.toolBlur,
+  ToolType.ocr => strings.extractText,
 };
 
 /// Vertical floating tool palette.
@@ -61,25 +63,32 @@ class ToolRail extends StatelessWidget {
     return GlassPanel(
       padding: const EdgeInsets.all(6),
       radius: 14,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          for (var i = 0; i < _tools.length; i++) ...[
-            if (i == 2 || i == 8) const _RailDivider(),
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 1),
-              child: Transform.rotate(
-                angle: 0,
-                child: _RailButton(
-                  spec: _tools[i],
-                  label: toolName(strings, _tools[i].tool),
-                  active: controller.tool == _tools[i].tool,
-                  onPressed: () => controller.setTool(_tools[i].tool),
+      // The rail is placed between a fixed top/bottom inset (see
+      // editor_screen.dart), so it has a bounded max height but no fixed
+      // one — this scrolls instead of overflowing once there isn't room for
+      // every tool (small editor windows, or more tools added later),
+      // while staying its natural shrink-wrapped size otherwise.
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (var i = 0; i < _tools.length; i++) ...[
+              if (i == 2 || i == 8) const _RailDivider(),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 1),
+                child: Transform.rotate(
+                  angle: 0,
+                  child: _RailButton(
+                    spec: _tools[i],
+                    label: toolName(strings, _tools[i].tool),
+                    active: controller.tool == _tools[i].tool,
+                    onPressed: () => controller.setTool(_tools[i].tool),
+                  ),
                 ),
               ),
-            ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }

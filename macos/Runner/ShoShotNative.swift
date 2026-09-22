@@ -1,7 +1,9 @@
 import Cocoa
 import FlutterMacOS
+import ImageIO
 import ScreenCaptureKit
 import ServiceManagement
+import Vision
 
 /// Native bridge for ShoShot (macOS).
 ///
@@ -113,6 +115,12 @@ final class ShoShotNative: NSObject {
       result(nil)
     case "getSystemAccent":
       result(currentAccentARGB())
+    case "recognizeText":
+      guard let png = (args["png"] as? FlutterStandardTypedData)?.data else {
+        result(nil)
+        return
+      }
+      recognizeText(png: png, result: result)
     default:
       result(FlutterMethodNotImplemented)
     }
@@ -330,6 +338,40 @@ final class ShoShotNative: NSObject {
     let h = min(height, visible.height - 40)
     let frame = NSRect(x: visible.midX - w / 2, y: visible.midY - h / 2, width: w, height: h)
     window.setFrame(frame, display: true)
+  }
+
+  // MARK: - Text recognition
+
+  private func recognizeText(png: Data, result: @escaping FlutterResult) {
+    guard let source = CGImageSourceCreateWithData(png as CFData, nil),
+          let cgImage = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
+      result(nil)
+      return
+    }
+    let request = VNRecognizeTextRequest { request, error in
+      guard error == nil,
+            let observations = request.results as? [VNRecognizedTextObservation] else {
+        DispatchQueue.main.async { result(nil) }
+        return
+      }
+      let text = observations
+        .compactMap { $0.topCandidates(1).first?.string }
+        .joined(separator: "\n")
+      DispatchQueue.main.async { result(text.isEmpty ? nil : text) }
+    }
+    request.recognitionLevel = .accurate
+    request.usesLanguageCorrection = true
+    // No `recognitionLanguages` override: Vision picks languages from the
+    // user's preferred-languages list, which covers pt/en without us having
+    // to plumb the app's own language setting through.
+    DispatchQueue.global(qos: .userInitiated).async {
+      let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+      do {
+        try handler.perform([request])
+      } catch {
+        DispatchQueue.main.async { result(nil) }
+      }
+    }
   }
 
   // MARK: - Clipboard

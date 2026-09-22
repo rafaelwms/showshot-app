@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:window_manager/window_manager.dart';
 
 import '../models/capture_mode.dart';
@@ -10,11 +11,12 @@ import '../models/capture_session.dart';
 import '../services/capture_service.dart';
 import '../services/export_service.dart';
 import '../services/native_bridge.dart';
+import '../services/ocr_service.dart';
 import '../services/settings_service.dart';
 
 enum FlowStage { idle, capturing, overlay, editor }
 
-enum OverlayAction { edit, copy, save, cancel }
+enum OverlayAction { edit, copy, save, extractText, cancel }
 
 class OverlayResult {
   const OverlayResult(this.action, [this.rect]);
@@ -48,7 +50,14 @@ class FlowMessage {
   final String? path;
 }
 
-enum FlowMessageKind { copied, saved, saveFailed, captureFailed }
+enum FlowMessageKind {
+  copied,
+  saved,
+  saveFailed,
+  captureFailed,
+  textCopied,
+  noTextFound,
+}
 
 /// Orchestrates capture → overlay → editor and the window transitions between
 /// them. There is a single OS window that changes role along the way.
@@ -58,6 +67,7 @@ class CaptureFlow extends ChangeNotifier with WindowListener {
     required this.native,
     required this.capture,
     required this.export,
+    required this.ocr,
   }) {
     windowManager.addListener(this);
   }
@@ -69,6 +79,7 @@ class CaptureFlow extends ChangeNotifier with WindowListener {
   final NativeBridge native;
   final CaptureService capture;
   final ExportService export;
+  final OcrService ocr;
 
   final navigatorKey = GlobalKey<NavigatorState>();
   final messengerKey = GlobalKey<ScaffoldMessengerState>();
@@ -192,6 +203,12 @@ class CaptureFlow extends ChangeNotifier with WindowListener {
           _lastMessage = ok ? const FlowMessage(FlowMessageKind.copied) : null;
           _setStage(FlowStage.idle);
           await _finish();
+        case OverlayAction.extractText:
+          final image = await session.crop(rect);
+          await _extractText(image);
+          _disposeSession();
+          _setStage(FlowStage.idle);
+          await _finish();
         case OverlayAction.save:
           final image = await session.crop(rect);
           if (settings.settings.askWhereToSave) {
@@ -227,6 +244,20 @@ class CaptureFlow extends ChangeNotifier with WindowListener {
     await settings.addRecentFile(path);
     if (settings.settings.copyAfterSave) await export.copyToClipboard(image);
     _lastMessage = FlowMessage(FlowMessageKind.saved, path: path);
+  }
+
+  /// Recognizes text in [image] and copies it to the clipboard. Disposes
+  /// [image]; sets [lastMessage] to report the outcome either way.
+  Future<void> _extractText(ui.Image image) async {
+    final png = await ExportService.encodePng(image);
+    image.dispose();
+    final text = await ocr.recognize(png);
+    if (text == null) {
+      _lastMessage = const FlowMessage(FlowMessageKind.noTextFound);
+      return;
+    }
+    await Clipboard.setData(ClipboardData(text: text));
+    _lastMessage = const FlowMessage(FlowMessageKind.textCopied);
   }
 
   /// Called by the editor once the user copied/saved/discarded.

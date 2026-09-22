@@ -56,6 +56,11 @@ class AppSettings {
       key: PhysicalKeyboardKey.digit3,
       modifiers: const [HotKeyModifier.control, HotKeyModifier.shift],
     ),
+    CaptureMode.text: HotKey(
+      identifier: 'shoshot.text',
+      key: PhysicalKeyboardKey.digit4,
+      modifiers: const [HotKeyModifier.control, HotKeyModifier.shift],
+    ),
   };
 
   factory AppSettings.defaults() => AppSettings(hotKeys: defaultHotKeys());

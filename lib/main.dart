@@ -12,6 +12,7 @@ import 'services/capture_service.dart';
 import 'services/export_service.dart';
 import 'services/hotkey_service.dart';
 import 'services/native_bridge.dart';
+import 'services/ocr_service.dart';
 import 'services/settings_service.dart';
 import 'services/startup_service.dart';
 import 'services/system_theme_service.dart';
@@ -26,11 +27,13 @@ Future<void> main(List<String> args) async {
   final native = NativeBridge.instance;
   final capture = CaptureService(native);
   final export = ExportService(native);
+  final ocr = OcrService(native);
   final flow = CaptureFlow(
     settings: settings,
     native: native,
     capture: capture,
     export: export,
+    ocr: ocr,
   );
   final hotkeys = HotkeyService(settings: settings, onTrigger: flow.start);
   final tray = TrayService(
@@ -73,6 +76,7 @@ Future<void> main(List<String> args) async {
     startup: startup,
     native: native,
     export: export,
+    ocr: ocr,
     systemTheme: systemTheme,
   );
   runApp(ShoShotApp(services: services));

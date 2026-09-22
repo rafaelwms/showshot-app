@@ -36,6 +36,8 @@ class _HomeScreenState extends State<HomeScreen> {
       FlowMessageKind.saved => strings.savedTo(message.path ?? ''),
       FlowMessageKind.saveFailed => strings.saveFailed,
       FlowMessageKind.captureFailed => strings.captureFailed,
+      FlowMessageKind.textCopied => strings.textCopied,
+      FlowMessageKind.noTextFound => strings.noTextFound,
     };
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
   }
@@ -264,6 +266,7 @@ class _CaptureCardState extends State<_CaptureCard> {
     CaptureMode.area => Icons.highlight_alt_rounded,
     CaptureMode.window => Icons.web_asset_rounded,
     CaptureMode.fullScreen => Icons.desktop_windows_rounded,
+    CaptureMode.text => Icons.text_fields_rounded,
   };
 
   @override

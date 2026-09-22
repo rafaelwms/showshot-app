@@ -209,4 +209,22 @@ class NativeBridge {
       return null;
     }
   }
+
+  /// Recognizes text in a screenshot (macOS: Vision; Windows: Windows.Media.
+  /// Ocr). Returns null when no text was found, or the platform doesn't
+  /// implement it — [OcrService] is what callers should actually go through,
+  /// since it also covers Linux via `tesseract`.
+  Future<String?> recognizeText(Uint8List png) async {
+    try {
+      final text = await _channel.invokeMethod<String>('recognizeText', {
+        'png': png,
+      });
+      return (text == null || text.isEmpty) ? null : text;
+    } on MissingPluginException {
+      return null;
+    } on PlatformException catch (error) {
+      debugPrint('recognizeText failed: ${error.message}');
+      return null;
+    }
+  }
 }

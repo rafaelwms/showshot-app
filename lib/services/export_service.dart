@@ -33,6 +33,30 @@ class ExportService {
     return result;
   }
 
+  /// Crops [source] to [rect] (image pixel coordinates), clamped to the
+  /// image bounds.
+  static Future<ui.Image> crop(ui.Image source, ui.Rect rect) async {
+    final full = ui.Rect.fromLTWH(
+      0,
+      0,
+      source.width.toDouble(),
+      source.height.toDouble(),
+    );
+    final src = rect.intersect(full);
+    if (src.width < 1 || src.height < 1) return source.clone();
+    final recorder = ui.PictureRecorder();
+    final canvas = ui.Canvas(recorder);
+    final dst = ui.Rect.fromLTWH(0, 0, src.width, src.height);
+    canvas.drawImageRect(source, src, dst, ui.Paint());
+    final picture = recorder.endRecording();
+    final result = await picture.toImage(
+      src.width.round(),
+      src.height.round(),
+    );
+    picture.dispose();
+    return result;
+  }
+
   static Future<Uint8List> encodePng(ui.Image image) async {
     final data = await image.toByteData(format: ui.ImageByteFormat.png);
     if (data == null) throw StateError('PNG encoding failed');

@@ -61,6 +61,9 @@ abstract class Strings {
   String get cancel;
   String get capturing;
   String get captureFailed;
+  String get extractText;
+  String get textCopied;
+  String get noTextFound;
 
   // Editor
   String get toolSelect;
@@ -153,6 +156,7 @@ class _Pt extends Strings {
     CaptureMode.area => 'Área',
     CaptureMode.window => 'Janela',
     CaptureMode.fullScreen => 'Tela inteira',
+    CaptureMode.text => 'Texto',
   };
 
   @override
@@ -160,6 +164,7 @@ class _Pt extends Strings {
     CaptureMode.area => 'Arraste para selecionar uma região da tela',
     CaptureMode.window => 'Clique em uma janela para capturá-la',
     CaptureMode.fullScreen => 'Captura o monitor sob o cursor',
+    CaptureMode.text => 'Arraste para reconhecer o texto de uma região',
   };
 
   @override
@@ -214,6 +219,12 @@ class _Pt extends Strings {
   String get capturing => 'Capturando…';
   @override
   String get captureFailed => 'Não foi possível capturar a tela.';
+  @override
+  String get extractText => 'Extrair texto';
+  @override
+  String get textCopied => 'Texto copiado';
+  @override
+  String get noTextFound => 'Nenhum texto encontrado';
 
   @override
   String get toolSelect => 'Selecionar';
@@ -391,12 +402,14 @@ class _En extends Strings {
     CaptureMode.area => 'Area',
     CaptureMode.window => 'Window',
     CaptureMode.fullScreen => 'Full screen',
+    CaptureMode.text => 'Text',
   };
 
   @override
   String modeDescription(CaptureMode mode) => switch (mode) {
     CaptureMode.area => 'Drag to select a region of the screen',
     CaptureMode.window => 'Click a window to capture it',
+    CaptureMode.text => 'Drag to recognize text in a region',
     CaptureMode.fullScreen => 'Captures the display under the cursor',
   };
 
@@ -452,6 +465,12 @@ class _En extends Strings {
   String get capturing => 'Capturing…';
   @override
   String get captureFailed => 'Could not capture the screen.';
+  @override
+  String get extractText => 'Extract text';
+  @override
+  String get textCopied => 'Text copied';
+  @override
+  String get noTextFound => 'No text found';
 
   @override
   String get toolSelect => 'Select';

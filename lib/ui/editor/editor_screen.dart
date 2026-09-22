@@ -42,12 +42,14 @@ class _EditorScreenState extends State<EditorScreen> {
       _controller = EditorController(
         image: document.image,
         pixelRatio: document.pixelRatio,
+        onOcrRegion: (rect) => _extractTextInRegion(rect),
       );
       DebugHooks.editor = _controller;
       DebugHooks.editorAction = (action) => switch (action) {
         'copy' => _copy(),
         'discard' => _discard(),
         'saveAs' => _save(forceDialog: true),
+        'extractText' => _extractText(),
         _ => _save(),
       };
       _fitted = false;
@@ -103,6 +105,51 @@ class _EditorScreenState extends State<EditorScreen> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  /// Unlike copy/save, this doesn't close the editor — recognizing text is
+  /// non-destructive and the user likely wants to keep editing afterwards.
+  Future<void> _extractText() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      final image = await _renderFinal();
+      await _recognizeAndCopy(image);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Same as [_extractText], but only for the region the user dragged with
+  /// the OCR tool (`ToolType.ocr`, wired via `EditorController.onOcrRegion`).
+  Future<void> _extractTextInRegion(Rect rect) async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      final full = await _renderFinal();
+      final cropped = await ExportService.crop(full, rect);
+      full.dispose();
+      await _recognizeAndCopy(cropped);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Disposes [image]. Assumes the caller already guarded on `_busy`.
+  Future<void> _recognizeAndCopy(ui.Image image) async {
+    final services = AppScope.of(context);
+    final strings = Strings.of(context);
+    final png = await ExportService.encodePng(image);
+    image.dispose();
+    final text = await services.ocr.recognize(png);
+    if (!mounted) return;
+    if (text == null) {
+      _toast(strings.noTextFound);
+      return;
+    }
+    await Clipboard.setData(ClipboardData(text: text));
+    if (!mounted) return;
+    _toast(strings.textCopied);
   }
 
   Future<void> _save({bool forceDialog = false}) async {
@@ -207,6 +254,8 @@ class _EditorScreenState extends State<EditorScreen> {
         _copy();
       } else if (key == LogicalKeyboardKey.keyS) {
         _save(forceDialog: shift);
+      } else if (key == LogicalKeyboardKey.keyT) {
+        _extractText();
       } else if (key == LogicalKeyboardKey.equal ||
           key == LogicalKeyboardKey.add) {
         controller.zoomBy(1.25, _viewportSize);
@@ -248,6 +297,7 @@ class _EditorScreenState extends State<EditorScreen> {
       LogicalKeyboardKey.keyT => ToolType.text,
       LogicalKeyboardKey.keyN => ToolType.number,
       LogicalKeyboardKey.keyB => ToolType.blur,
+      LogicalKeyboardKey.keyO => ToolType.ocr,
       _ => null,
     };
     if (tool != null) {

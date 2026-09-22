@@ -16,9 +16,10 @@ Site: <https://showshot.rafaelwms.com>
 
 | Área | O que faz |
 | --- | --- |
-| **Captura** | Área selecionada, janela específica (clique) ou tela inteira. A tela é congelada no momento do disparo — pelo atalho ou pelo menu do tray. |
-| **Overlay de seleção** | Escurecimento fora da seleção, destaque automático da janela sob o cursor, lupa de precisão com coordenadas, handles de redimensionamento, guias de terços, tamanho em pixels, atalhos (`Space` tela inteira, `Enter` confirma, `Esc` cancela, setas movem 1px / `Shift`+setas 10px, `⌘/Ctrl+C` copia, `⌘/Ctrl+S` salva, `⌘/Ctrl+E` edita). |
-| **Editor** | Seta, linha, retângulo, elipse, caneta, marcador, texto, numeração de passos, desfoque; seleção/mover/redimensionar; paleta + cor personalizada (HSV/hex); espessura, transparência, preenchimento, tamanho de fonte; desfazer/refazer; zoom (roda do mouse, pinça, `⌘/Ctrl +/-/0/1`), pan (ferramenta mão ou `Espaço`). |
+| **Captura** | Área selecionada, janela específica (clique), tela inteira ou texto (OCR). A tela é congelada no momento do disparo — pelo atalho ou pelo menu do tray. |
+| **Overlay de seleção** | Escurecimento fora da seleção, destaque automático da janela sob o cursor, lupa de precisão com coordenadas, handles de redimensionamento, guias de terços, tamanho em pixels, atalhos (`Space` tela inteira, `Enter` confirma, `Esc` cancela, setas movem 1px / `Shift`+setas 10px, `⌘/Ctrl+C` copia, `⌘/Ctrl+S` salva, `⌘/Ctrl+E` edita, `⌘/Ctrl+T` extrai texto). |
+| **Texto (OCR)** | Reconhece o texto de uma seleção e copia direto para a área de transferência. macOS usa o framework Vision (on-device, sem configuração); Linux tenta `tesseract` se estiver instalado; Windows ainda não tem OCR nativo implementado (ver "Limitações"). |
+| **Editor** | Seta, linha, retângulo, elipse, caneta, marcador, texto, numeração de passos, desfoque, **extrair texto** (arrasta uma região e reconhece só o que está nela); seleção/mover/redimensionar; paleta + cor personalizada (HSV/hex); espessura, transparência, preenchimento, tamanho de fonte; desfazer/refazer; zoom (roda do mouse, pinça, `⌘/Ctrl +/-/0/1`), pan (ferramenta mão ou `Espaço`). |
 | **Saída** | Copiar para a área de transferência (PNG + bitmap nativo), salvar PNG/JPG com diálogo ou direto na pasta padrão (`Imagens/ShowShot`), copiar ao salvar, lista de capturas recentes. |
 | **Sistema** | Ícone na barra de menu (macOS/Linux) e tray (Windows), atalhos globais configuráveis, iniciar com o sistema, ocultar/mostrar ícone no Dock (macOS), idioma PT/EN automático. |
 
@@ -29,6 +30,7 @@ Site: <https://showshot.rafaelwms.com>
 | Capturar área | `Ctrl+Shift+1` (`⌃⇧1` no macOS) |
 | Capturar janela | `Ctrl+Shift+2` |
 | Capturar tela inteira | `Ctrl+Shift+3` |
+| Capturar texto (OCR) | `Ctrl+Shift+4` |
 
 Todos podem ser alterados em **Configurações → Atalhos** (clique no campo e pressione a
 combinação; `Backspace` remove).
@@ -37,8 +39,11 @@ combinação; `Backspace` remove).
 
 `V` selecionar · `H` mover tela · `A` seta · `L` linha · `R` retângulo · `E` elipse ·
 `P` caneta · `M` marcador · `T` texto · `N` numeração · `B` desfoque ·
+`O` extrair texto (arraste uma região; não deixa anotação, só copia o texto reconhecido) ·
 `⌘/Ctrl+Z` desfazer · `⌘/Ctrl+Shift+Z` refazer · `Delete` excluir seleção ·
-`⌘/Ctrl+C` copiar · `⌘/Ctrl+S` salvar · `⌘/Ctrl+Shift+S` salvar como · `Esc` fechar.
+`⌘/Ctrl+C` copiar · `⌘/Ctrl+S` salvar · `⌘/Ctrl+Shift+S` salvar como ·
+`⌘/Ctrl+T` extrair texto da imagem inteira (atalho direto, sem precisar trocar de ferramenta) ·
+`Esc` fechar.
 
 ---
 
@@ -54,6 +59,7 @@ lib/
 │   ├── native_bridge.dart    # canal `shoshot/native` (captura, janelas, overlay, clipboard)
 │   ├── capture_service.dart  # congela o display sob o cursor (+ fallback CLI no Linux/Wayland)
 │   ├── export_service.dart   # render das anotações, PNG/JPG, clipboard, salvar
+│   ├── ocr_service.dart      # reconhecimento de texto (Vision/Windows.Media.Ocr/tesseract)
 │   ├── hotkey_service.dart   # atalhos globais (hotkey_manager)
 │   ├── tray_service.dart     # ícone e menu do tray (tray_manager)
 │   ├── startup_service.dart  # iniciar com o sistema (launch_at_startup)
@@ -151,10 +157,10 @@ printf 'select 100 100 600 400\nconfirm edit\n' | nc 127.0.0.1 47391
 printf 'tool arrow\ndraw 50 50 300 200\ntext 100 300 Olá\naction save\n' | nc 127.0.0.1 47391
 ```
 
-Comandos: `capture area|window|fullScreen`, `select x y w h`, `hover x y`, `windows`,
-`confirm edit|copy|save|cancel`, `tool <nome>`, `draw x1 y1 x2 y2 [...]`, `text x y <texto>`,
+Comandos: `capture area|window|fullScreen|text`, `select x y w h`, `hover x y`, `windows`,
+`confirm edit|copy|save|extractText|cancel`, `tool <nome>`, `draw x1 y1 x2 y2 [...]`, `text x y <texto>`,
 `color AARRGGBB`, `style <espessura> <opacidade> [fill]`, `undo`,
-`action save|saveAs|copy|discard`,
+`action save|saveAs|copy|extractText|discard`,
 `setting ask|copyAfterSave|magnifier|jpg|language true|false|<valor>`, `home`, `settings`,
 `hide`, `close`, `stage`, `settingsBack`, `quit`.
 
@@ -166,5 +172,10 @@ Comandos: `capture area|window|fullScreen`, `select x y w h`, `hover x y`, `wind
   vez).
 - Windows e Linux foram escritos contra as APIs oficiais, mas o build nativo destas
   plataformas ainda precisa ser validado em máquinas reais.
-- Ideias futuras: gravação de vídeo/GIF, upload para a nuvem com link curto, OCR, pixelização
+- OCR (captura de Texto) só está implementado de verdade no macOS (framework Vision) e,
+  quando disponível, via `tesseract` no Linux. No Windows, `recognizeText` ainda não tem
+  implementação nativa — a captura de texto simplesmente não encontra texto até alguém
+  implementar `Windows.Media.Ocr` lá (precisa de C++/WinRT, que este projeto não usa hoje;
+  não dá para validar isso via o toolchain mingw usado neste repositório).
+- Ideias futuras: gravação de vídeo/GIF, upload para a nuvem com link curto, pixelização
   além do desfoque, crop no editor, histórico de capturas com busca.

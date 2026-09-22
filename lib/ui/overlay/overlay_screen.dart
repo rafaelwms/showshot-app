@@ -311,6 +311,8 @@ class _OverlayScreenState extends State<OverlayScreen> {
       _finish(OverlayAction.save);
     } else if (command && key == LogicalKeyboardKey.keyE) {
       _finish(OverlayAction.edit);
+    } else if (command && key == LogicalKeyboardKey.keyT) {
+      _finish(OverlayAction.extractText);
     } else if (_selection != null && _isArrow(key)) {
       final step = keyboard.isShiftPressed ? 10.0 : 1.0;
       final delta = switch (key) {
@@ -333,6 +335,12 @@ class _OverlayScreenState extends State<OverlayScreen> {
       key == LogicalKeyboardKey.arrowDown;
 
   void _confirmDefault() {
+    // Text mode has one purpose: Enter always extracts text, regardless of
+    // the "after capture" setting (which is about images).
+    if (_session?.mode == CaptureMode.text) {
+      _finish(OverlayAction.extractText);
+      return;
+    }
     final action = AppScope.of(context).settings.settings.afterCaptureAction;
     _finish(switch (action) {
       AfterCaptureAction.openEditor => OverlayAction.edit,
@@ -625,10 +633,11 @@ class _OverlayScreenState extends State<OverlayScreen> {
 
   Widget _buildActionBar(Strings strings, Size size) {
     final sel = _selection!;
+    final isTextMode = _session?.mode == CaptureMode.text;
     const barHeight = 44.0;
     // The bar sizes itself to its content (see `mainAxisSize.min` below); this
     // is only an estimate used to keep it from being positioned off-screen.
-    const estimatedWidth = 200.0;
+    const estimatedWidth = 240.0;
     const gap = 10.0;
     double top;
     if (sel.bottom + gap + barHeight <= size.height - 8) {
@@ -674,6 +683,14 @@ class _OverlayScreenState extends State<OverlayScreen> {
               shortcut: '${command}C',
               onPressed: () => _finish(OverlayAction.copy),
             ),
+            const SizedBox(width: 2),
+            ToolButton(
+              icon: Icons.text_fields_rounded,
+              tooltip: strings.extractText,
+              shortcut: '${command}T',
+              active: isTextMode,
+              onPressed: () => _finish(OverlayAction.extractText),
+            ),
             Container(
               width: 1,
               height: 22,
@@ -684,7 +701,7 @@ class _OverlayScreenState extends State<OverlayScreen> {
               icon: Icons.brush_rounded,
               tooltip: strings.edit,
               shortcut: '${command}E',
-              active: true,
+              active: !isTextMode,
               onPressed: () => _finish(OverlayAction.edit),
             ),
           ],

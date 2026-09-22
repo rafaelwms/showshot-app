@@ -3,7 +3,10 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/painting.dart';
 
-/// Editor tools. Everything except [select] and [hand] creates annotations.
+/// Editor tools. Everything except [select], [hand] and [ocr] creates
+/// annotations — [ocr] draws a selection rectangle like [rect], but on
+/// release it recognizes text in that region instead of leaving a shape
+/// behind.
 enum ToolType {
   select,
   hand,
@@ -16,6 +19,7 @@ enum ToolType {
   text,
   number,
   blur,
+  ocr,
 }
 
 /// Visual properties shared by all annotations.

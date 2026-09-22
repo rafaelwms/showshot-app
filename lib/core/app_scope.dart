@@ -4,6 +4,7 @@ import '../flow/capture_flow.dart';
 import '../services/export_service.dart';
 import '../services/hotkey_service.dart';
 import '../services/native_bridge.dart';
+import '../services/ocr_service.dart';
 import '../services/settings_service.dart';
 import '../services/startup_service.dart';
 import '../services/system_theme_service.dart';
@@ -19,6 +20,7 @@ class AppServices {
     required this.startup,
     required this.native,
     required this.export,
+    required this.ocr,
     required this.systemTheme,
   });
 
@@ -29,6 +31,7 @@ class AppServices {
   final StartupService startup;
   final NativeBridge native;
   final ExportService export;
+  final OcrService ocr;
   final SystemThemeService systemTheme;
 }
 
