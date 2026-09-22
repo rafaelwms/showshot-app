@@ -28,6 +28,26 @@ dev_dependencies:
     sdk: flutter
 
   flutter_lints: ^6.0.0
+  msix: ^3.18.0
+
+# MSIX packaging for Microsoft Store distribution (`dart run msix:create`).
+# identity_name / publisher / publisher_display_name come verbatim from
+# Partner Center > App identity — don't hand-edit without checking there.
+msix_config:
+  display_name: Show Shot
+  publisher_display_name: Rafael WMS
+  identity_name: RafaelWMS.ShowShot
+  publisher: CN=AF042F64-62A1-4E4C-AE05-051096B63CC2
+  msix_version: 1.0.0.0
+  logo_path: artwork/Icon Light.png
+  languages: en-us, pt-br
+  capabilities: runFullTrust
+  store: true
+  # For local sideload testing only (not needed for the Store submission
+  # build): comment out `store: true` above and set `install_certificate:
+  # false`, run `dart run msix:create`, then — from an ELEVATED PowerShell —
+  # trust the generated test certificate and install the package. See the
+  # exact commands in CLAUDE.md / ask Claude to walk through it again.
 
 flutter:
 
