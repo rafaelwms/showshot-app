@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Show Shot
+Comment=Capture, annotate and share screenshots
+Exec=shoshot
+Icon=com.rafaelwms.showshot
+Terminal=false
+Categories=Utility;Graphics;
+StartupWMClass=com.rafaelwms.showshot

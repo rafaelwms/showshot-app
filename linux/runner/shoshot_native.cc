@@ -595,6 +595,120 @@ void InitSystemAccent(NativeState* state) {
 }
 
 // ---------------------------------------------------------------------------
+// Screenshot (org.freedesktop.portal.Screenshot — the only capture path
+// under Wayland, where there is no XGetImage equivalent). Two round trips:
+// the `Screenshot` call itself just registers the request and hands back a
+// `Request` object path; the actual result (a PNG written to a temp file)
+// arrives later on that object's `Response` signal, since a real desktop
+// may show an interactive picker first. We ask for `interactive: false` so
+// GNOME takes the shot immediately with no dialog.
+// ---------------------------------------------------------------------------
+
+struct PortalScreenshotRequest {
+  FlMethodCall* call = nullptr;
+  GDBusConnection* bus = nullptr;
+  guint signal_id = 0;
+};
+
+void OnScreenshotResponse(GDBusConnection*, const gchar*, const gchar*,
+                          const gchar*, const gchar* signal_name,
+                          GVariant* parameters, gpointer user_data) {
+  auto* req = static_cast<PortalScreenshotRequest*>(user_data);
+  if (g_strcmp0(signal_name, "Response") == 0) {
+    guint32 response_code = 1;
+    g_autoptr(GVariant) results = nullptr;
+    g_variant_get(parameters, "(u@a{sv})", &response_code, &results);
+
+    g_autoptr(FlMethodResponse) response = nullptr;
+    if (response_code == 0 && results != nullptr) {
+      g_autoptr(GVariant) uri_variant =
+          g_variant_lookup_value(results, "uri", G_VARIANT_TYPE_STRING);
+      gchar* path = uri_variant != nullptr
+                        ? g_filename_from_uri(
+                              g_variant_get_string(uri_variant, nullptr),
+                              nullptr, nullptr)
+                        : nullptr;
+      gchar* contents = nullptr;
+      gsize length = 0;
+      g_autoptr(GError) error = nullptr;
+      if (path != nullptr &&
+          g_file_get_contents(path, &contents, &length, &error)) {
+        g_autoptr(FlValue) bytes = fl_value_new_uint8_list(
+            reinterpret_cast<const uint8_t*>(contents), length);
+        response = FL_METHOD_RESPONSE(fl_method_success_response_new(bytes));
+        g_free(contents);
+      } else {
+        response = FL_METHOD_RESPONSE(fl_method_error_response_new(
+            "capture_failed",
+            error ? error->message : "portal returned no screenshot file",
+            nullptr));
+      }
+      if (path != nullptr) {
+        remove(path);
+        g_free(path);
+      }
+    } else if (response_code == 1) {
+      response = FL_METHOD_RESPONSE(
+          fl_method_error_response_new("cancelled", "capture cancelled", nullptr));
+    } else {
+      response = FL_METHOD_RESPONSE(fl_method_error_response_new(
+          "capture_failed", "screenshot portal request failed", nullptr));
+    }
+    fl_method_call_respond(req->call, response, nullptr);
+  }
+
+  g_dbus_connection_signal_unsubscribe(req->bus, req->signal_id);
+  g_object_unref(req->call);
+  delete req;
+}
+
+void StartScreenshotPortal(NativeState* state, FlMethodCall* call) {
+  if (state->session_bus == nullptr) {
+    g_autoptr(FlMethodResponse) response = FL_METHOD_RESPONSE(
+        fl_method_error_response_new("unsupported", "no session bus", nullptr));
+    fl_method_call_respond(call, response, nullptr);
+    return;
+  }
+
+  static guint token_counter = 0;
+  g_autofree gchar* token = g_strdup_printf("shoshot%u", ++token_counter);
+
+  GVariantBuilder options;
+  g_variant_builder_init(&options, G_VARIANT_TYPE("a{sv}"));
+  g_variant_builder_add(&options, "{sv}", "handle_token",
+                        g_variant_new_string(token));
+  g_variant_builder_add(&options, "{sv}", "interactive",
+                        g_variant_new_boolean(FALSE));
+
+  g_autoptr(GError) error = nullptr;
+  g_autoptr(GVariant) reply = g_dbus_connection_call_sync(
+      state->session_bus, "org.freedesktop.portal.Desktop",
+      "/org/freedesktop/portal/desktop", "org.freedesktop.portal.Screenshot",
+      "Screenshot", g_variant_new("(sa{sv})", "", &options),
+      G_VARIANT_TYPE("(o)"), G_DBUS_CALL_FLAGS_NONE, 5000, nullptr, &error);
+
+  const gchar* handle_path = nullptr;
+  if (reply != nullptr) g_variant_get(reply, "(&o)", &handle_path);
+  if (handle_path == nullptr) {
+    g_autoptr(FlMethodResponse) response =
+        FL_METHOD_RESPONSE(fl_method_error_response_new(
+            "capture_failed",
+            error ? error->message : "portal Screenshot call failed",
+            nullptr));
+    fl_method_call_respond(call, response, nullptr);
+    return;
+  }
+
+  auto* req = new PortalScreenshotRequest();
+  req->call = FL_METHOD_CALL(g_object_ref(call));
+  req->bus = state->session_bus;
+  req->signal_id = g_dbus_connection_signal_subscribe(
+      state->session_bus, "org.freedesktop.portal.Desktop",
+      "org.freedesktop.portal.Request", "Response", handle_path, nullptr,
+      G_DBUS_SIGNAL_FLAGS_NONE, OnScreenshotResponse, req, nullptr);
+}
+
+// ---------------------------------------------------------------------------
 // Method dispatch
 // ---------------------------------------------------------------------------
 
@@ -639,6 +753,9 @@ void MethodCallHandler(FlMethodChannel*, FlMethodCall* call,
       response = FL_METHOD_RESPONSE(fl_method_error_response_new(
           "unsupported", "Native capture requires X11", nullptr));
     }
+  } else if (strcmp(method, "captureScreenshotPortal") == 0) {
+    StartScreenshotPortal(state, call);
+    return;  // Responds asynchronously once the portal's Response arrives.
   } else if (strcmp(method, "listWindows") == 0) {
 #ifdef GDK_WINDOWING_X11
     if (IsX11()) {

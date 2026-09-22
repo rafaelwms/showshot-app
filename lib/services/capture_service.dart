@@ -38,7 +38,9 @@ class CaptureService {
 
     final imageFuture = info.supportsNativeCapture
         ? _captureNative(display)
-        : _captureWithSystemTools(display);
+        : (info.isWayland
+              ? _captureWayland(display)
+              : _captureWithSystemTools(display));
     final windowsFuture =
         info.supportsWindowList && mode != CaptureMode.fullScreen
         ? _native.listWindows()
@@ -67,8 +69,26 @@ class CaptureService {
     }
   }
 
-  /// Linux/Wayland fallback: ask a desktop screenshot tool to write a PNG and
-  /// crop it to the target display.
+  /// Linux/Wayland: `org.freedesktop.portal.Screenshot`, falling back to a
+  /// CLI screenshot tool if the portal call fails (missing/older portal).
+  Future<ui.Image> _captureWayland(DisplayInfo display) async {
+    try {
+      final png = await _native.captureScreenshotPortal();
+      final codec = await ui.instantiateImageCodec(png);
+      final frame = await codec.getNextFrame();
+      codec.dispose();
+      return await _cropToDisplay(frame.image, display);
+    } on PlatformException catch (error) {
+      debugPrint(
+        'Portal screenshot failed (${error.code}: ${error.message}); '
+        'falling back to CLI tools',
+      );
+      return await _captureWithSystemTools(display);
+    }
+  }
+
+  /// Fallback for platforms with no portal (or an older one): ask a desktop
+  /// screenshot tool to write a PNG and crop it to the target display.
   Future<ui.Image> _captureWithSystemTools(DisplayInfo display) async {
     final tmp = await getTemporaryDirectory();
     final path =

@@ -148,6 +148,21 @@ class NativeBridge {
     );
   }
 
+  /// Linux/Wayland only: `org.freedesktop.portal.Screenshot`, returned as
+  /// PNG bytes of the whole screen (the portal has no per-monitor concept).
+  Future<Uint8List> captureScreenshotPortal() async {
+    final bytes = await _channel.invokeMethod<Uint8List>(
+      'captureScreenshotPortal',
+    );
+    if (bytes == null) {
+      throw PlatformException(
+        code: 'capture_failed',
+        message: 'Empty response',
+      );
+    }
+    return bytes;
+  }
+
   Future<List<WindowInfo>> listWindows() async {
     try {
       final list =
