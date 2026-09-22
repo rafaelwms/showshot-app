@@ -10,7 +10,19 @@
 #include <algorithm>
 #include <cstring>
 #include <string>
+#include <thread>
 #include <vector>
+
+#ifdef SHOSHOT_HAS_WINRT_OCR
+#include <unknwn.h>
+
+#include <winrt/Windows.Foundation.Collections.h>
+#include <winrt/Windows.Foundation.h>
+#include <winrt/Windows.Globalization.h>
+#include <winrt/Windows.Graphics.Imaging.h>
+#include <winrt/Windows.Media.Ocr.h>
+#include <winrt/Windows.Storage.Streams.h>
+#endif
 
 namespace {
 
@@ -70,6 +82,51 @@ std::string Utf8FromWide(const std::wstring& wide) {
                       size, nullptr, nullptr);
   return out;
 }
+
+#ifdef SHOSHOT_HAS_WINRT_OCR
+// Decodes a PNG in-memory, runs Windows.Media.Ocr on it, and joins the
+// recognized lines with "\n" — mirrors ShoShotNative.swift's Vision-based
+// recognizeText on macOS. Runs entirely off the platform thread (see
+// RecognizeText below); throws winrt::hresult_error on any WinRT failure,
+// which the caller treats the same as "no text found".
+std::string RunOcr(const std::vector<uint8_t>& png) {
+  using namespace winrt::Windows::Globalization;
+  using namespace winrt::Windows::Graphics::Imaging;
+  using namespace winrt::Windows::Media::Ocr;
+  using namespace winrt::Windows::Storage::Streams;
+
+  InMemoryRandomAccessStream stream;
+  DataWriter writer(stream);
+  writer.WriteBytes(
+      winrt::array_view<const uint8_t>(png.data(), png.data() + png.size()));
+  writer.StoreAsync().get();
+  writer.DetachStream();
+  stream.Seek(0);
+
+  auto decoder = BitmapDecoder::CreateAsync(stream).get();
+  auto bitmap = decoder.GetSoftwareBitmapAsync().get();
+  auto converted = SoftwareBitmap::Convert(bitmap, BitmapPixelFormat::Bgra8,
+                                           BitmapAlphaMode::Premultiplied);
+
+  auto engine = OcrEngine::TryCreateFromUserProfileLanguages();
+  if (!engine) {
+    // Falls back to English when the user's preferred languages don't have
+    // an OCR language pack installed (a minimal/non-en Windows install).
+    engine = OcrEngine::TryCreateFromLanguage(Language(L"en-US"));
+  }
+  if (!engine) return std::string();
+
+  auto result = engine.RecognizeAsync(converted).get();
+  std::wstring text;
+  bool first = true;
+  for (auto const& line : result.Lines()) {
+    if (!first) text += L"\n";
+    first = false;
+    text += line.Text().c_str();
+  }
+  return Utf8FromWide(text);
+}
+#endif  // SHOSHOT_HAS_WINRT_OCR
 
 std::wstring WideFromUtf8(const std::string& utf8) {
   if (utf8.empty()) return std::wstring();
@@ -278,6 +335,12 @@ void ShoShotNative::HandleMethodCall(
     result->Success();
   } else if (method == "getSystemAccent") {
     result->Success(EncodableValue(CurrentAccentArgb()));
+  } else if (method == "recognizeText") {
+#ifdef SHOSHOT_HAS_WINRT_OCR
+    RecognizeText(GetBytesArg(args, "png"), std::move(result));
+#else
+    result->NotImplemented();
+#endif
   } else {
     result->NotImplemented();
   }
@@ -512,3 +575,26 @@ bool ShoShotNative::SetClipboardImage(const std::vector<uint8_t>& png,
   if (png_mem) GlobalFree(png_mem);
   return ok;
 }
+
+#ifdef SHOSHOT_HAS_WINRT_OCR
+void ShoShotNative::RecognizeText(
+    std::vector<uint8_t> png,
+    std::unique_ptr<flutter::MethodResult<EncodableValue>> result) {
+  // Runs off the platform thread (Vision on macOS is likewise async) — WinRT
+  // needs its own apartment per thread, and MethodResult::Success/Error are
+  // safe to call from a background thread (they just marshal the reply into
+  // the engine's messenger).
+  std::thread([png = std::move(png), result = std::move(result)]() mutable {
+    winrt::init_apartment(winrt::apartment_type::multi_threaded);
+    try {
+      std::string text = RunOcr(png);
+      result->Success(text.empty() ? EncodableValue() : EncodableValue(text));
+    } catch (winrt::hresult_error const&) {
+      result->Success(EncodableValue());
+    } catch (...) {
+      result->Success(EncodableValue());
+    }
+    winrt::uninit_apartment();
+  }).detach();
+}
+#endif  // SHOSHOT_HAS_WINRT_OCR
