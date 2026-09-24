@@ -19,6 +19,7 @@ class AppSettings {
     this.saveFormat = ImageFormat.png,
     this.jpgQuality = 90,
     this.saveDirectory,
+    this.saveDirectoryBookmark,
     this.askWhereToSave = true,
     this.copyAfterSave = true,
     this.showMagnifier = true,
@@ -33,6 +34,10 @@ class AppSettings {
   final ImageFormat saveFormat;
   final int jpgQuality;
   final String? saveDirectory;
+
+  /// macOS only: base64 security-scoped bookmark for [saveDirectory], which
+  /// App Sandbox needs to write there again after a relaunch.
+  final String? saveDirectoryBookmark;
   final bool askWhereToSave;
   final bool copyAfterSave;
   final bool showMagnifier;
@@ -72,6 +77,7 @@ class AppSettings {
     ImageFormat? saveFormat,
     int? jpgQuality,
     String? saveDirectory,
+    String? saveDirectoryBookmark,
     bool clearSaveDirectory = false,
     bool? askWhereToSave,
     bool? copyAfterSave,
@@ -89,6 +95,9 @@ class AppSettings {
       saveDirectory: clearSaveDirectory
           ? null
           : (saveDirectory ?? this.saveDirectory),
+      saveDirectoryBookmark: clearSaveDirectory
+          ? null
+          : (saveDirectoryBookmark ?? this.saveDirectoryBookmark),
       askWhereToSave: askWhereToSave ?? this.askWhereToSave,
       copyAfterSave: copyAfterSave ?? this.copyAfterSave,
       showMagnifier: showMagnifier ?? this.showMagnifier,
@@ -108,6 +117,7 @@ class AppSettings {
     'saveFormat': saveFormat.name,
     'jpgQuality': jpgQuality,
     'saveDirectory': saveDirectory,
+    'saveDirectoryBookmark': saveDirectoryBookmark,
     'askWhereToSave': askWhereToSave,
     'copyAfterSave': copyAfterSave,
     'showMagnifier': showMagnifier,
@@ -140,6 +150,7 @@ class AppSettings {
       ),
       jpgQuality: (json['jpgQuality'] as num?)?.toInt() ?? 90,
       saveDirectory: json['saveDirectory'] as String?,
+      saveDirectoryBookmark: json['saveDirectoryBookmark'] as String?,
       askWhereToSave: json['askWhereToSave'] as bool? ?? true,
       copyAfterSave: json['copyAfterSave'] as bool? ?? true,
       showMagnifier: json['showMagnifier'] as bool? ?? true,

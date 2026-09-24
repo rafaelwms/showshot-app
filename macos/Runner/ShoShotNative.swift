@@ -113,6 +113,18 @@ final class ShoShotNative: NSObject {
         NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
       }
       result(nil)
+    case "bookmarkDirectory":
+      guard let path = args["path"] as? String else {
+        result(nil)
+        return
+      }
+      result(bookmarkDirectory(path: path))
+    case "resolveDirectoryBookmark":
+      guard let data = (args["bookmark"] as? FlutterStandardTypedData)?.data else {
+        result(nil)
+        return
+      }
+      result(resolveDirectoryBookmark(data))
     case "getSystemAccent":
       result(currentAccentARGB())
     case "recognizeText":
@@ -124,6 +136,46 @@ final class ShoShotNative: NSObject {
     default:
       result(FlutterMethodNotImplemented)
     }
+  }
+
+  // MARK: - Save folder (security-scoped bookmark)
+
+  // Under App Sandbox, a folder picked in NSOpenPanel is only writable for the
+  // rest of that launch. A security-scoped bookmark, created while that access
+  // is still live and persisted by Dart, restores it on later launches.
+  private var scopedDirectory: URL?
+
+  private func bookmarkDirectory(path: String) -> FlutterStandardTypedData? {
+    do {
+      let data = try URL(fileURLWithPath: path, isDirectory: true).bookmarkData(
+        options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil)
+      return FlutterStandardTypedData(bytes: data)
+    } catch {
+      NSLog("ShoShot: bookmarkDirectory failed: \(error)")
+      return nil
+    }
+  }
+
+  /// Resolves the bookmark and starts accessing the folder for the rest of the
+  /// launch (only one custom folder is ever active). Returns `{path, bookmark}`
+  /// — `bookmark` is a refreshed copy when the stored one went stale (folder
+  /// moved/renamed), else nil — or nil when it can't be resolved at all.
+  private func resolveDirectoryBookmark(_ data: Data) -> [String: Any]? {
+    var stale = false
+    guard let url = try? URL(resolvingBookmarkData: data, options: .withSecurityScope,
+                             relativeTo: nil, bookmarkDataIsStale: &stale),
+          url.startAccessingSecurityScopedResource() else {
+      return nil
+    }
+    if let previous = scopedDirectory, previous != url {
+      previous.stopAccessingSecurityScopedResource()
+    }
+    scopedDirectory = url
+    var refreshed: FlutterStandardTypedData?
+    if stale {
+      refreshed = bookmarkDirectory(path: url.path)
+    }
+    return ["path": url.path, "bookmark": refreshed as Any]
   }
 
   // MARK: - System accent color

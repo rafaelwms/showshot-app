@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -49,10 +50,7 @@ class ExportService {
     final dst = ui.Rect.fromLTWH(0, 0, src.width, src.height);
     canvas.drawImageRect(source, src, dst, ui.Paint());
     final picture = recorder.endRecording();
-    final result = await picture.toImage(
-      src.width.round(),
-      src.height.round(),
-    );
+    final result = await picture.toImage(src.width.round(), src.height.round());
     picture.dispose();
     return result;
   }
@@ -137,13 +135,44 @@ class ExportService {
     return dir;
   }
 
+  /// Called with a fresh base64 bookmark when macOS reports the stored one as
+  /// stale (folder moved/renamed), so the caller can persist it.
+  void Function(String bookmark)? onBookmarkRefreshed;
+
+  /// The bookmark already resolved (and being accessed) in this launch.
+  String? _resolvedBookmark;
+  String? _resolvedPath;
+
   Future<Directory> targetDirectory(AppSettings settings) async {
     final custom = settings.saveDirectory;
     if (custom != null && custom.isNotEmpty) {
-      final dir = Directory(custom);
+      final path = await _sandboxAccessiblePath(settings) ?? custom;
+      final dir = Directory(path);
       if (await dir.exists()) return dir;
     }
     return defaultDirectory();
+  }
+
+  /// macOS/App Sandbox: re-opens access to the custom folder through its
+  /// security-scoped bookmark, once per launch. Null when there's no bookmark
+  /// (other platforms, or a folder picked before bookmarks existed).
+  Future<String?> _sandboxAccessiblePath(AppSettings settings) async {
+    final bookmark = settings.saveDirectoryBookmark;
+    if (!Platform.isMacOS || bookmark == null || bookmark.isEmpty) return null;
+    if (bookmark == _resolvedBookmark) return _resolvedPath;
+    final resolved = await _native.resolveDirectoryBookmark(
+      base64Decode(bookmark),
+    );
+    if (resolved == null) return null;
+    _resolvedBookmark = bookmark;
+    _resolvedPath = resolved.path;
+    final refreshed = resolved.refreshed;
+    if (refreshed != null) {
+      final encoded = base64Encode(refreshed);
+      _resolvedBookmark = encoded;
+      onBookmarkRefreshed?.call(encoded);
+    }
+    return resolved.path;
   }
 
   /// Saves [image] according to [settings]. Returns the written path, or null

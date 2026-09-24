@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:file_selector/file_selector.dart';
@@ -64,9 +65,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final services = AppScope.of(context);
     final current = services.settings.settings.saveDirectory ?? _defaultDir;
     final path = await getDirectoryPath(initialDirectory: current);
-    if (path != null) {
-      await services.settings.update((s) => s.copyWith(saveDirectory: path));
-    }
+    if (path == null) return;
+    // Bookmark it right away, while the sandbox still grants access to the
+    // folder the user just picked — that grant ends with this launch.
+    final bookmark = Platform.isMacOS
+        ? await services.native.bookmarkDirectory(path)
+        : null;
+    await services.settings.update(
+      (s) => s.copyWith(
+        saveDirectory: path,
+        saveDirectoryBookmark: bookmark == null ? '' : base64Encode(bookmark),
+      ),
+    );
   }
 
   @override

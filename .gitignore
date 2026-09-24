@@ -121,3 +121,6 @@ x64/
 x86/
 *.[Cc]ache
 !*.[Cc]ache/
+
+# DMGs gerados pelo make_dmg.sh
+/dist/

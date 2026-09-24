@@ -26,7 +26,9 @@ Future<void> main(List<String> args) async {
   final settings = await SettingsService.load();
   final native = NativeBridge.instance;
   final capture = CaptureService(native);
-  final export = ExportService(native);
+  final export = ExportService(native)
+    ..onBookmarkRefreshed = (bookmark) =>
+        settings.update((s) => s.copyWith(saveDirectoryBookmark: bookmark));
   final ocr = OcrService(native);
   final flow = CaptureFlow(
     settings: settings,

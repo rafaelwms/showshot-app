@@ -199,6 +199,41 @@ class NativeBridge {
   Future<void> revealFile(String path) =>
       _channel.invokeMethod('revealFile', {'path': path});
 
+  /// macOS (App Sandbox): a security-scoped bookmark for a folder the user
+  /// just picked, so it stays writable across launches. Null elsewhere or on
+  /// failure.
+  Future<Uint8List?> bookmarkDirectory(String path) async {
+    try {
+      return await _channel.invokeMethod<Uint8List>('bookmarkDirectory', {
+        'path': path,
+      });
+    } on MissingPluginException {
+      return null;
+    }
+  }
+
+  /// Resolves a bookmark from [bookmarkDirectory] and starts accessing that
+  /// folder for the rest of this launch. Returns the folder path plus a
+  /// refreshed bookmark when the stored one went stale, or null if the folder
+  /// can't be reached anymore.
+  Future<({String path, Uint8List? refreshed})?> resolveDirectoryBookmark(
+    Uint8List bookmark,
+  ) async {
+    try {
+      final raw = await _channel.invokeMapMethod<String, dynamic>(
+        'resolveDirectoryBookmark',
+        {'bookmark': bookmark},
+      );
+      if (raw == null) return null;
+      return (
+        path: raw['path'] as String,
+        refreshed: raw['bookmark'] as Uint8List?,
+      );
+    } on MissingPluginException {
+      return null;
+    }
+  }
+
   /// Reads the OS accent color once. Returns null where unsupported (the
   /// caller should keep [SystemAccent.fallback]).
   Future<SystemAccent?> getSystemAccent() async {
