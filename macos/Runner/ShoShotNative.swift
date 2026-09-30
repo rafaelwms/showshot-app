@@ -3,6 +3,7 @@ import FlutterMacOS
 import ImageIO
 import ScreenCaptureKit
 import ServiceManagement
+import UserNotifications
 import Vision
 
 /// Native bridge for ShoShot (macOS).
@@ -34,6 +35,7 @@ final class ShoShotNative: NSObject {
       self?.handle(call, result: result)
     }
     observeSystemAccent()
+    UNUserNotificationCenter.current().delegate = self
     // Backs the `launch_at_startup` package using SMAppService (macOS 13+).
     launchChannel = FlutterMethodChannel(name: "launch_at_startup", binaryMessenger: messenger)
     launchChannel.setMethodCallHandler { call, result in
@@ -104,6 +106,11 @@ final class ShoShotNative: NSObject {
         NSWorkspace.shared.open(url)
       }
       result(nil)
+    case "notify":
+      notify(
+        title: (args["title"] as? String) ?? "",
+        body: (args["body"] as? String) ?? "",
+        result: result)
     case "setDockIconVisible":
       let visible = (args["visible"] as? Bool) ?? false
       NSApp.setActivationPolicy(visible ? .regular : .accessory)
@@ -397,6 +404,37 @@ final class ShoShotNative: NSObject {
     (window as? MainFlutterWindow)?.layoutTrafficLights()
   }
 
+  // MARK: - Notifications
+
+  /// Posts a system notification. Asks for permission the first time; replies
+  /// `true` only when the notification was actually handed to the system
+  /// (the user allowed notifications), so Dart can fall back to an in-app
+  /// toast otherwise.
+  private func notify(title: String, body: String, result: @escaping FlutterResult) {
+    let center = UNUserNotificationCenter.current()
+    let reply: (Bool) -> Void = { ok in DispatchQueue.main.async { result(ok) } }
+    let deliver = {
+      let content = UNMutableNotificationContent()
+      content.title = title
+      content.body = body
+      let request = UNNotificationRequest(
+        identifier: UUID().uuidString, content: content, trigger: nil)
+      center.add(request) { error in reply(error == nil) }
+    }
+    center.getNotificationSettings { settings in
+      switch settings.authorizationStatus {
+      case .authorized, .provisional:
+        deliver()
+      case .notDetermined:
+        center.requestAuthorization(options: [.alert]) { granted, _ in
+          if granted { deliver() } else { reply(false) }
+        }
+      default:
+        reply(false)
+      }
+    }
+  }
+
   // MARK: - Text recognition
 
   private func recognizeText(png: Data, result: @escaping FlutterResult) {
@@ -438,5 +476,17 @@ final class ShoShotNative: NSObject {
     let pasteboard = NSPasteboard.general
     pasteboard.clearContents()
     return pasteboard.writeObjects([image])
+  }
+}
+
+// Without a delegate macOS suppresses notifications while the app is the
+// active one — and it is, whenever the editor or Home is on screen.
+extension ShoShotNative: UNUserNotificationCenterDelegate {
+  func userNotificationCenter(
+    _ center: UNUserNotificationCenter,
+    willPresent notification: UNNotification,
+    withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+  ) {
+    completionHandler([.banner, .list])
   }
 }

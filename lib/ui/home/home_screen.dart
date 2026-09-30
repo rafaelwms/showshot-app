@@ -5,9 +5,9 @@ import 'package:flutter/material.dart';
 import '../../core/app_scope.dart';
 import '../../core/strings.dart';
 import '../../core/theme.dart';
-import '../../flow/capture_flow.dart';
 import '../../models/capture_mode.dart';
 import '../../services/hotkey_service.dart';
+import '../../services/notification_service.dart';
 import '../widgets/common.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -42,14 +42,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (message == null) return;
     services.flow.consumeMessage();
     final strings = Strings.of(context);
-    final text = switch (message.kind) {
-      FlowMessageKind.copied => strings.copied,
-      FlowMessageKind.saved => strings.savedTo(message.path ?? ''),
-      FlowMessageKind.saveFailed => strings.saveFailed,
-      FlowMessageKind.captureFailed => strings.captureFailed,
-      FlowMessageKind.textCopied => strings.textCopied,
-      FlowMessageKind.noTextFound => strings.noTextFound,
-    };
+    final text = NotificationService.textFor(strings, message);
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
   }
 

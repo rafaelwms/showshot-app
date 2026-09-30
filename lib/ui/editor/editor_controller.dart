@@ -522,6 +522,12 @@ class EditorController extends ChangeNotifier {
   // Zoom
   // ---------------------------------------------------------------------------
 
+  double? _fitScale;
+
+  /// True while the view is still at the scale [fitTo] last chose — i.e. the
+  /// user hasn't zoomed since — so a window resize should re-fit it.
+  bool get isFitted => _fitScale != null && (zoom - _fitScale!).abs() < 1e-3;
+
   void fitTo(Size viewport, {double padding = 48}) {
     if (viewport.isEmpty) return;
     final scale = math
@@ -531,6 +537,7 @@ class EditorController extends ChangeNotifier {
         )
         .clamp(0.02, 1.0);
     _setZoom(scale, viewport);
+    _fitScale = zoom;
   }
 
   void actualSize(Size viewport) => _setZoom(1.0, viewport);

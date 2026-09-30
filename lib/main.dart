@@ -12,6 +12,7 @@ import 'services/capture_service.dart';
 import 'services/export_service.dart';
 import 'services/hotkey_service.dart';
 import 'services/native_bridge.dart';
+import 'services/notification_service.dart';
 import 'services/ocr_service.dart';
 import 'services/settings_service.dart';
 import 'services/startup_service.dart';
@@ -36,6 +37,7 @@ Future<void> main(List<String> args) async {
     capture: capture,
     export: export,
     ocr: ocr,
+    notifications: NotificationService(settings: settings, native: native),
   );
   final hotkeys = HotkeyService(settings: settings, onTrigger: flow.start);
   final tray = TrayService(

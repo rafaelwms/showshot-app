@@ -243,6 +243,24 @@ class NativeBridge {
     }
   }
 
+  /// Posts an OS notification. True only if the system accepted it — false
+  /// when notifications aren't allowed/available, or the platform doesn't
+  /// implement it. Never waits on a permission prompt for more than a few
+  /// seconds, so a flow can't hang on it.
+  Future<bool> notify({required String title, required String body}) async {
+    try {
+      final ok = await _channel
+          .invokeMethod<bool>('notify', {'title': title, 'body': body})
+          .timeout(const Duration(seconds: 4), onTimeout: () => false);
+      return ok ?? false;
+    } on MissingPluginException {
+      return false;
+    } on PlatformException catch (error) {
+      debugPrint('notify failed: ${error.message}');
+      return false;
+    }
+  }
+
   /// Launch details only the native side can see (see [NativeLaunchInfo]).
   /// Platforms that don't implement it report a plain, non-login launch.
   Future<NativeLaunchInfo> launchInfo() async {

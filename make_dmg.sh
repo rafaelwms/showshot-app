@@ -150,11 +150,11 @@ fi
 
 # ----------------------------------------------------------------------------
 # ETAPA 5 — Versão e pasta de saída
-# A versão padrão vem do app (CFBundleShortVersionString = "1.0.0" do pubspec).
+# A versão padrão vem do app (CFBundleShortVersionString = "1.2.0" do pubspec).
 # ----------------------------------------------------------------------------
 step "5. Versão e destino"
 APP_VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Contents/Info.plist" 2>/dev/null || echo "")
-VERSION=$(ask "Versão (vai no nome do arquivo)" "${APP_VERSION:-1.0.0}")
+VERSION=$(ask "Versão (vai no nome do arquivo)" "${APP_VERSION:-1.2.0}")
 OUT_DIR=$(ask "Pasta de saída" "$PWD/dist")
 OUT_DIR="${OUT_DIR/#\~/$HOME}"
 mkdir -p "$OUT_DIR"

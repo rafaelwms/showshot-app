@@ -222,6 +222,14 @@ class DebugCommandServer {
             ),
           );
           return 'ok';
+        case 'smooth':
+          // `smooth 0..1`: curve smoothing for the pen/marker (and selection).
+          final editor = DebugHooks.editor;
+          if (editor == null) return 'no editor';
+          editor.setStyle(
+            editor.style.copyWith(smoothing: double.parse(parts[1])),
+          );
+          return 'ok';
         case 'action':
           final action = DebugHooks.editorAction;
           if (action == null) return 'no editor';
@@ -252,6 +260,50 @@ class DebugCommandServer {
         case 'undo':
           DebugHooks.editor?.undo();
           return 'ok';
+        case 'notify':
+          // `notify copied|saved|saveFailed|textCopied|noTextFound`: sends
+          // that message as an OS notification; replies whether it was shown.
+          final kind = FlowMessageKind.values.firstWhere(
+            (k) => k.name == parts.elementAtOrNull(1),
+            orElse: () => FlowMessageKind.copied,
+          );
+          final shown = await flow.notify(
+            FlowMessage(
+              kind,
+              path: '/Users/demo/Pictures/ShowShot/capture.png',
+            ),
+          );
+          return 'delivered=$shown';
+        case 'trayaction':
+          // `trayaction area|window|fullScreen|text|openApp|menu` sets the
+          // left-click action; `trayaction click` simulates the left click.
+          final arg = parts.elementAtOrNull(1);
+          if (arg == 'click') {
+            services.tray.debugLeftClick();
+            return 'ok stage=${flow.stage.name}';
+          }
+          final action = TrayAction.values.firstWhere(
+            (a) => a.name == arg,
+            orElse: () => TrayAction.area,
+          );
+          await services.settings.update(
+            (s) => s.copyWith(trayLeftClick: action),
+          );
+          return 'ok action=${services.settings.settings.trayLeftClick.name}';
+        case 'editorwindow':
+          // `editorwindow normal|maximized|fullScreen`: how the editor opens.
+          final mode = EditorWindowMode.values.firstWhere(
+            (m) => m.name == parts.elementAtOrNull(1),
+            orElse: () => EditorWindowMode.maximized,
+          );
+          await services.settings.update((s) => s.copyWith(editorWindow: mode));
+          return 'ok editorWindow=${services.settings.settings.editorWindow.name}';
+        case 'winstate':
+          final size = await windowManager.getSize();
+          return 'visible=${await windowManager.isVisible()} '
+              'maximized=${await windowManager.isMaximized()} '
+              'fullScreen=${await windowManager.isFullScreen()} '
+              'size=${size.width.round()}x${size.height.round()}';
         case 'banner':
           // `banner on|off`: Home's screen-recording permission banner.
           flow.debugPermissionMissing = parts.elementAtOrNull(1) != 'off';

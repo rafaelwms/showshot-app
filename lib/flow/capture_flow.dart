@@ -6,13 +6,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:window_manager/window_manager.dart';
 
+import '../models/app_settings.dart';
 import '../models/capture_mode.dart';
 import '../models/capture_session.dart';
+import '../models/flow_message.dart';
 import '../services/capture_service.dart';
 import '../services/export_service.dart';
 import '../services/native_bridge.dart';
+import '../services/notification_service.dart';
 import '../services/ocr_service.dart';
 import '../services/settings_service.dart';
+
+export '../models/flow_message.dart';
 
 enum FlowStage { idle, capturing, overlay, editor }
 
@@ -43,22 +48,6 @@ class EditorDocument {
   final bool autoSave;
 }
 
-/// Notification shown to the user after a flow completes.
-class FlowMessage {
-  const FlowMessage(this.kind, {this.path});
-  final FlowMessageKind kind;
-  final String? path;
-}
-
-enum FlowMessageKind {
-  copied,
-  saved,
-  saveFailed,
-  captureFailed,
-  textCopied,
-  noTextFound,
-}
-
 /// Orchestrates capture → overlay → editor and the window transitions between
 /// them. There is a single OS window that changes role along the way.
 class CaptureFlow extends ChangeNotifier with WindowListener {
@@ -68,6 +57,7 @@ class CaptureFlow extends ChangeNotifier with WindowListener {
     required this.capture,
     required this.export,
     required this.ocr,
+    required this.notifications,
   }) {
     windowManager.addListener(this);
   }
@@ -80,6 +70,7 @@ class CaptureFlow extends ChangeNotifier with WindowListener {
   final CaptureService capture;
   final ExportService export;
   final OcrService ocr;
+  final NotificationService notifications;
 
   final navigatorKey = GlobalKey<NavigatorState>();
   final messengerKey = GlobalKey<ScaffoldMessengerState>();
@@ -217,7 +208,11 @@ class CaptureFlow extends ChangeNotifier with WindowListener {
           final ok = await export.copyToClipboard(image);
           image.dispose();
           _disposeSession();
-          _lastMessage = ok ? const FlowMessage(FlowMessageKind.copied) : null;
+          if (ok) {
+            await _report(const FlowMessage(FlowMessageKind.copied));
+          } else {
+            _lastMessage = null;
+          }
           _setStage(FlowStage.idle);
           await _finish();
         case OverlayAction.extractText:
@@ -255,12 +250,12 @@ class CaptureFlow extends ChangeNotifier with WindowListener {
   Future<void> _saveDirect(ui.Image image) async {
     final path = await export.save(image, settings.settings);
     if (path == null) {
-      _lastMessage = const FlowMessage(FlowMessageKind.saveFailed);
+      await _report(const FlowMessage(FlowMessageKind.saveFailed));
       return;
     }
     await settings.addRecentFile(path);
     if (settings.settings.copyAfterSave) await export.copyToClipboard(image);
-    _lastMessage = FlowMessage(FlowMessageKind.saved, path: path);
+    await _report(FlowMessage(FlowMessageKind.saved, path: path));
   }
 
   /// Recognizes text in [image] and copies it to the clipboard. Disposes
@@ -270,16 +265,17 @@ class CaptureFlow extends ChangeNotifier with WindowListener {
     image.dispose();
     final text = await ocr.recognize(png);
     if (text == null) {
-      _lastMessage = const FlowMessage(FlowMessageKind.noTextFound);
+      await _report(const FlowMessage(FlowMessageKind.noTextFound));
       return;
     }
     await Clipboard.setData(ClipboardData(text: text));
-    _lastMessage = const FlowMessage(FlowMessageKind.textCopied);
+    await _report(const FlowMessage(FlowMessageKind.textCopied));
   }
 
   /// Called by the editor once the user copied/saved/discarded.
   Future<void> closeEditor({FlowMessage? message}) async {
     if (_stage != FlowStage.editor) return;
+    await _leaveEditorWindowMode();
     await windowManager.hide();
     await _showBlank();
     _document?.image.dispose();
@@ -326,6 +322,19 @@ class CaptureFlow extends ChangeNotifier with WindowListener {
     exit(0);
   }
 
+  /// Shows [message] as an OS notification when possible (see
+  /// [NotificationService]); false means the caller should show it in-app.
+  Future<bool> notify(FlowMessage message) => notifications.show(message);
+
+  /// Reports a finished flow's outcome: as an OS notification when possible,
+  /// otherwise left in [lastMessage] for Home's toast. (Capture failures stay
+  /// in-app — they bring Home up, so the message has somewhere to show.)
+  Future<void> _report(FlowMessage message) async {
+    final delivered =
+        message.kind != FlowMessageKind.captureFailed && await notify(message);
+    _lastMessage = delivered ? null : message;
+  }
+
   void consumeMessage() {
     _lastMessage = null;
   }
@@ -351,8 +360,40 @@ class CaptureFlow extends ChangeNotifier with WindowListener {
     await windowManager.setSize(size);
     await windowManager.center();
     await _settle();
+    // OS full screen isn't offered on Windows; treat it as maximized there.
+    var mode = settings.settings.editorWindow;
+    if (mode == EditorWindowMode.fullScreen && Platform.isWindows) {
+      mode = EditorWindowMode.maximized;
+    }
+    // Maximize before showing so the window never flashes at the small size.
+    if (mode == EditorWindowMode.maximized) await windowManager.maximize();
     await windowManager.show();
     await windowManager.focus();
+    if (mode == EditorWindowMode.fullScreen) {
+      await windowManager.setFullScreen(true);
+    }
+  }
+
+  /// Undoes [_openEditor]'s maximize / full screen so the window goes back to
+  /// a normal frame (Home and the overlay size it themselves).
+  Future<void> _leaveEditorWindowMode() async {
+    if (await windowManager.isFullScreen()) {
+      // macOS animates the exit, and hiding the window mid-animation gets
+      // undone when it finishes: wait for the real "left full screen" event.
+      final left = _leftFullScreen = Completer<void>();
+      await windowManager.setFullScreen(false);
+      await left.future.timeout(const Duration(seconds: 3), onTimeout: () {});
+      _leftFullScreen = null;
+    }
+    if (await windowManager.isMaximized()) await windowManager.unmaximize();
+  }
+
+  Completer<void>? _leftFullScreen;
+
+  @override
+  void onWindowLeaveFullScreen() {
+    final completer = _leftFullScreen;
+    if (completer != null && !completer.isCompleted) completer.complete();
   }
 
   /// Debug automation: opens the editor on a synthetic [session] instead of a

@@ -14,6 +14,8 @@ class MainFlutterWindow: NSWindow {
 
     native = ShoShotNative(window: self, messenger: flutterViewController.engine.binaryMessenger)
 
+    // Lets the editor open in macOS full screen (Settings → Editor window).
+    collectionBehavior.insert(.fullScreenPrimary)
     alphaValue = 0
     observeTrafficLightLayout()
     // Fail open: if the launch notification never reaches the app delegate,

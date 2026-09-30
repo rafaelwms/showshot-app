@@ -252,6 +252,9 @@ class PropertiesBar extends StatelessWidget {
     final targetIsBlur = selected is ShapeAnnotation
         ? selected.kind == ShapeKind.blur
         : tool == ToolType.blur;
+    final targetIsFreehand = selected is StrokeAnnotation
+        ? true
+        : selected == null && (tool == ToolType.pen || tool == ToolType.marker);
     final showColor = !targetIsBlur && tool != ToolType.hand;
     final ratio = controller.pixelRatio;
 
@@ -288,6 +291,22 @@ class PropertiesBar extends StatelessWidget {
               style.copyWith(strokeWidth: (v * ratio).roundToDouble()),
             ),
           ),
+          if (targetIsFreehand) ...[
+            const _BarDivider(),
+            _LabeledSlider(
+              icon: Icons.waves_rounded,
+              label: strings.smoothing,
+              value: style.smoothing,
+              min: 0,
+              max: 1,
+              display: style.smoothing <= 0
+                  ? strings.smoothingOff
+                  : '${(style.smoothing * 100).round()}%',
+              onChanged: (v) => controller.setStyle(
+                style.copyWith(smoothing: (v * 20).round() / 20),
+              ),
+            ),
+          ],
           if (!targetIsBlur) ...[
             const _BarDivider(),
             _LabeledSlider(

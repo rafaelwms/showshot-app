@@ -130,6 +130,57 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                       ),
                                     ),
                                   ),
+                                  // Linux panels handle tray clicks themselves.
+                                  if (Platform.isMacOS || Platform.isWindows)
+                                    _SettingRow(
+                                      title: strings.trayLeftClick,
+                                      subtitle: strings.trayLeftClickHint,
+                                      trailing: _Dropdown<TrayAction>(
+                                        value: settings.trayLeftClick,
+                                        items: {
+                                          for (final action
+                                              in TrayAction.values)
+                                            action: switch (action) {
+                                              TrayAction.openApp =>
+                                                strings.openApp,
+                                              TrayAction.menu =>
+                                                strings.trayShowMenu,
+                                              _ => strings.modeName(
+                                                action.mode!,
+                                              ),
+                                            },
+                                        },
+                                        onChanged: (v) => update(
+                                          (s) => s.copyWith(trayLeftClick: v),
+                                        ),
+                                      ),
+                                    ),
+                                  _SettingRow(
+                                    title: strings.editorWindow,
+                                    subtitle: strings.editorWindowHint,
+                                    trailing: _Dropdown<EditorWindowMode>(
+                                      value:
+                                          settings.editorWindow ==
+                                                  EditorWindowMode.fullScreen &&
+                                              Platform.isWindows
+                                          ? EditorWindowMode.maximized
+                                          : settings.editorWindow,
+                                      items: {
+                                        EditorWindowMode.maximized:
+                                            strings.editorWindowMaximized,
+                                        // OS full screen isn't offered on
+                                        // Windows (custom title bar).
+                                        if (!Platform.isWindows)
+                                          EditorWindowMode.fullScreen:
+                                              strings.editorWindowFullScreen,
+                                        EditorWindowMode.normal:
+                                            strings.editorWindowNormal,
+                                      },
+                                      onChanged: (v) => update(
+                                        (s) => s.copyWith(editorWindow: v),
+                                      ),
+                                    ),
+                                  ),
                                   if (Platform.isMacOS)
                                     _SettingRow(
                                       title: strings.showDockIcon,
@@ -352,6 +403,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                       ),
                                     ),
                                   ),
+                                  _SettingRow(
+                                    title: strings.systemNotifications,
+                                    subtitle: strings.systemNotificationsHint,
+                                    trailing: Switch(
+                                      value: settings.systemNotifications,
+                                      onChanged: (v) => update(
+                                        (s) =>
+                                            s.copyWith(systemNotifications: v),
+                                      ),
+                                    ),
+                                  ),
                                 ],
                               ),
                               _Section(
@@ -374,7 +436,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                               ),
                                             ),
                                             Text(
-                                              '${strings.version} 1.0.0 · ${strings.madeBy}',
+                                              '${strings.version} 1.2.0 · ${strings.madeBy}',
                                               style: TextStyle(
                                                 color:
                                                     context.palette.textMuted,

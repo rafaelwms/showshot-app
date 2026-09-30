@@ -47,6 +47,14 @@ abstract class Strings {
   String get permissionRequest;
   String get quit;
   String get openApp;
+  String get trayLeftClick;
+  String get trayLeftClickHint;
+  String get trayShowMenu;
+  String get editorWindow;
+  String get editorWindowHint;
+  String get editorWindowNormal;
+  String get editorWindowMaximized;
+  String get editorWindowFullScreen;
   String get hideWindow;
 
   // Overlay
@@ -54,7 +62,7 @@ abstract class Strings {
   String get hintClickWindow;
   String get hintEnter;
   String get hintEsc;
-  String get hintSpace;
+  String get hintSelectAll;
   String get edit;
   String get copy;
   String get save;
@@ -79,6 +87,8 @@ abstract class Strings {
   String get toolHand;
   String get color;
   String get strokeWidth;
+  String get smoothing;
+  String get smoothingOff;
   String get opacity;
   String get fill;
   String get fontSize;
@@ -130,6 +140,8 @@ abstract class Strings {
   String get askWhereToSaveHint;
   String get copyAfterSave;
   String get copyAfterSaveHint;
+  String get systemNotifications;
+  String get systemNotificationsHint;
   String get resetDefaults;
   String get recordShortcut;
   String get pressKeys;
@@ -195,6 +207,23 @@ class _Pt extends Strings {
   @override
   String get openApp => 'Abrir Show Shot';
   @override
+  String get trayLeftClick => 'Clique esquerdo no ícone';
+  @override
+  String get trayLeftClickHint =>
+      'Ação ao clicar com o botão esquerdo no ícone da barra de menu / bandeja.';
+  @override
+  String get trayShowMenu => 'Mostrar o menu';
+  @override
+  String get editorWindow => 'Janela do editor';
+  @override
+  String get editorWindowHint => 'Como o editor abre depois de uma captura.';
+  @override
+  String get editorWindowNormal => 'Tamanho da captura';
+  @override
+  String get editorWindowMaximized => 'Maximizada';
+  @override
+  String get editorWindowFullScreen => 'Tela cheia';
+  @override
   String get hideWindow => 'Ocultar janela';
 
   @override
@@ -204,9 +233,9 @@ class _Pt extends Strings {
   @override
   String get hintEnter => 'Enter confirma';
   @override
-  String get hintSpace => 'Espaço captura a tela inteira';
+  String get hintSelectAll => 'seleciona a tela inteira';
   @override
-  String get hintEsc => 'Esc cancela';
+  String get hintEsc => 'cancela';
   @override
   String get edit => 'Editar';
   @override
@@ -252,6 +281,10 @@ class _Pt extends Strings {
   String get color => 'Cor';
   @override
   String get strokeWidth => 'Espessura';
+  @override
+  String get smoothing => 'Suavizar curvas';
+  @override
+  String get smoothingOff => 'Desl.';
   @override
   String get opacity => 'Transparência';
   @override
@@ -361,6 +394,11 @@ class _Pt extends Strings {
   String get copyAfterSaveHint =>
       'Também coloca a imagem na área de transferência.';
   @override
+  String get systemNotifications => 'Notificações do sistema';
+  @override
+  String get systemNotificationsHint =>
+      'Avisa quando algo é copiado ou salvo, mesmo com a janela fechada.';
+  @override
   String get resetDefaults => 'Restaurar padrões';
   @override
   String get recordShortcut => 'Clique e pressione o atalho';
@@ -441,6 +479,23 @@ class _En extends Strings {
   @override
   String get openApp => 'Open Show Shot';
   @override
+  String get trayLeftClick => 'Left click on the icon';
+  @override
+  String get trayLeftClickHint =>
+      'What a left click on the menu bar / tray icon does.';
+  @override
+  String get trayShowMenu => 'Show the menu';
+  @override
+  String get editorWindow => 'Editor window';
+  @override
+  String get editorWindowHint => 'How the editor opens after a capture.';
+  @override
+  String get editorWindowNormal => 'Capture size';
+  @override
+  String get editorWindowMaximized => 'Maximized';
+  @override
+  String get editorWindowFullScreen => 'Full screen';
+  @override
   String get hideWindow => 'Hide window';
 
   @override
@@ -450,9 +505,9 @@ class _En extends Strings {
   @override
   String get hintEnter => 'Enter confirms';
   @override
-  String get hintSpace => 'Space captures the whole screen';
+  String get hintSelectAll => 'selects the whole screen';
   @override
-  String get hintEsc => 'Esc cancels';
+  String get hintEsc => 'cancels';
   @override
   String get edit => 'Edit';
   @override
@@ -498,6 +553,10 @@ class _En extends Strings {
   String get color => 'Color';
   @override
   String get strokeWidth => 'Stroke width';
+  @override
+  String get smoothing => 'Smooth curves';
+  @override
+  String get smoothingOff => 'Off';
   @override
   String get opacity => 'Opacity';
   @override
@@ -605,6 +664,11 @@ class _En extends Strings {
   String get copyAfterSave => 'Copy when saving';
   @override
   String get copyAfterSaveHint => 'Also puts the image on the clipboard.';
+  @override
+  String get systemNotifications => 'System notifications';
+  @override
+  String get systemNotificationsHint =>
+      'Tells you when something is copied or saved, even with the window closed.';
   @override
   String get resetDefaults => 'Reset to defaults';
   @override

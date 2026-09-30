@@ -30,6 +30,7 @@ class AnnotationStyle {
     this.opacity = 1.0,
     this.filled = false,
     this.fontSize = 24,
+    this.smoothing = 0,
   });
 
   final Color color;
@@ -37,6 +38,10 @@ class AnnotationStyle {
   final double opacity;
   final bool filled;
   final double fontSize;
+
+  /// Curve smoothing for the pen and marker, 0 (off, the raw pointer path)
+  /// to 1 (strongest). Ignored by every other tool.
+  final double smoothing;
 
   Color get effectiveColor => color.withValues(alpha: color.a * opacity);
 
@@ -46,6 +51,7 @@ class AnnotationStyle {
     double? opacity,
     bool? filled,
     double? fontSize,
+    double? smoothing,
   }) {
     return AnnotationStyle(
       color: color ?? this.color,
@@ -53,6 +59,7 @@ class AnnotationStyle {
       opacity: opacity ?? this.opacity,
       filled: filled ?? this.filled,
       fontSize: fontSize ?? this.fontSize,
+      smoothing: smoothing ?? this.smoothing,
     );
   }
 }
@@ -71,6 +78,72 @@ Offset rotatePoint(Offset point, Offset pivot, double angle) {
   final s = math.sin(angle);
   final d = point - pivot;
   return pivot + Offset(d.dx * c - d.dy * s, d.dx * s + d.dy * c);
+}
+
+/// Smooths a hand-drawn path. The path is resampled at an even spacing and
+/// convolved with a Gaussian whose width grows with [level] (0..1); the ends
+/// are extended by point reflection, which pins the first and last point and
+/// keeps straight runs straight.
+List<Offset> smoothPath(List<Offset> points, double level) {
+  if (level <= 0 || points.length < 3) return points;
+  var length = 0.0;
+  for (var i = 1; i < points.length; i++) {
+    length += (points[i] - points[i - 1]).distance;
+  }
+  if (length < 1e-6) return points;
+
+  // Even spacing (image pixels), coarser for very long paths.
+  final step = math.max(3.0, length / 3000);
+  final resampled = <Offset>[points.first];
+  var carried = 0.0;
+  for (var i = 1; i < points.length; i++) {
+    var from = points[i - 1];
+    final to = points[i];
+    var segment = (to - from).distance;
+    while (carried + segment >= step) {
+      final t = (step - carried) / segment;
+      from = Offset.lerp(from, to, t)!;
+      resampled.add(from);
+      segment = (to - from).distance;
+      carried = 0;
+    }
+    carried += segment;
+  }
+  resampled.add(points.last);
+  final n = resampled.length;
+  if (n < 3) return points;
+
+  final sigma = (2 + level * 38) / step; // in samples
+  final radius = math.max(1, (sigma * 3).ceil());
+  final weights = [
+    for (var k = -radius; k <= radius; k++)
+      math.exp(-(k * k) / (2 * sigma * sigma)),
+  ];
+  final total = weights.fold<double>(0, (a, b) => a + b);
+
+  Offset at(int i) {
+    if (i < 0) return resampled.first * 2.0 - resampled[math.min(-i, n - 1)];
+    if (i >= n) {
+      return resampled.last * 2.0 - resampled[math.max(2 * (n - 1) - i, 0)];
+    }
+    return resampled[i];
+  }
+
+  return [
+    resampled.first,
+    for (var i = 1; i < n - 1; i++)
+      () {
+        var x = 0.0, y = 0.0;
+        for (var k = -radius; k <= radius; k++) {
+          final p = at(i + k);
+          final w = weights[k + radius];
+          x += p.dx * w;
+          y += p.dy * w;
+        }
+        return Offset(x / total, y / total);
+      }(),
+    resampled.last,
+  ];
 }
 
 /// Wraps [angle] into (-π, π] so repeated rotations don't grow without bound.
@@ -454,25 +527,25 @@ class StrokeAnnotation extends Annotation {
 
   double get _width => marker ? style.strokeWidth * 4 : style.strokeWidth;
 
+  static final _smoothed = Expando<List<Offset>>();
+
+  /// What is actually drawn: [points] passed through [smoothPath] when the
+  /// style asks for smoothing. Bounds, handles, hit testing and painting all
+  /// use this, so they match what the user sees; [points] stays the raw
+  /// pointer path so the smoothing can be changed (or removed) later.
+  List<Offset> get renderPoints => style.smoothing <= 0 || points.length < 3
+      ? points
+      : (_smoothed[this] ??= smoothPath(points, style.smoothing));
+
   @override
   bool get isDegenerate => points.length < 2;
 
   @override
-  Rect get bounds {
-    if (points.isEmpty) return Rect.zero;
-    var minX = points.first.dx, maxX = points.first.dx;
-    var minY = points.first.dy, maxY = points.first.dy;
-    for (final p in points) {
-      if (p.dx < minX) minX = p.dx;
-      if (p.dx > maxX) maxX = p.dx;
-      if (p.dy < minY) minY = p.dy;
-      if (p.dy > maxY) maxY = p.dy;
-    }
-    return Rect.fromLTRB(minX, minY, maxX, maxY).inflate(_width / 2);
-  }
+  Rect get bounds => _pathRect.inflate(_width / 2);
 
   /// Bounding box of the path itself (without the pen width).
   Rect get _pathRect {
+    final points = renderPoints;
     if (points.isEmpty) return Rect.zero;
     var minX = points.first.dx, maxX = points.first.dx;
     var minY = points.first.dy, maxY = points.first.dy;
@@ -526,24 +599,44 @@ class StrokeAnnotation extends Annotation {
       return f.abs() < 0.02 ? (f < 0 ? -0.02 : 0.02) : f;
     }
 
-    final sx = factor(old.dx, now.dx);
-    final sy = factor(old.dy, now.dy);
-    final scaled = [
-      for (final p in points)
-        anchorLocal +
-            Offset((p.dx - anchorLocal.dx) * sx, (p.dy - anchorLocal.dy) * sy),
-    ];
-    final moved = StrokeAnnotation(
+    StrokeAnnotation scaled(double sx, double sy) => StrokeAnnotation(
       id: id,
       style: style,
-      points: scaled,
+      points: [
+        for (final p in points)
+          anchorLocal +
+              Offset(
+                (p.dx - anchorLocal.dx) * sx,
+                (p.dy - anchorLocal.dy) * sy,
+              ),
+      ],
       marker: marker,
       rotation: rotation,
     );
+
+    var sx = factor(old.dx, now.dx);
+    var sy = factor(old.dy, now.dy);
+    var moved = scaled(sx, sy);
+    if (style.smoothing > 0 && sx > 0 && sy > 0) {
+      // Smoothing shaves the corners, so the *drawn* box isn't exactly the
+      // raw box times the factor. Nudge the factors until it is.
+      for (var i = 0; i < 3; i++) {
+        final got =
+            moved._localCorner(index) - moved._localCorner((index + 2) % 4);
+        if (old.dx.abs() > 1e-6 && got.dx.abs() > 1e-6) sx *= now.dx / got.dx;
+        if (old.dy.abs() > 1e-6 && got.dy.abs() > 1e-6) sy *= now.dy / got.dy;
+        moved = scaled(sx, sy);
+      }
+    }
     // The pivot moved with the new bounds: shift everything so the anchor
     // corner is exactly where it was on screen.
     final drift =
-        anchor - rotatePoint(anchorLocal, moved.pivot, moved.rotation);
+        anchor -
+        rotatePoint(
+          moved._localCorner((index + 2) % 4),
+          moved.pivot,
+          moved.rotation,
+        );
     return moved.translated(drift);
   }
 
@@ -562,6 +655,7 @@ class StrokeAnnotation extends Annotation {
 
   @override
   bool hitTestLocal(Offset point, double tolerance) {
+    final points = renderPoints;
     final tol = tolerance + _width / 2;
     if (points.length == 1) return (points.first - point).distance <= tol;
     for (var i = 0; i < points.length - 1; i++) {
@@ -609,6 +703,7 @@ class StrokeAnnotation extends Annotation {
 
   @override
   void paintLocal(Canvas canvas, ui.Image? source) {
+    final points = renderPoints;
     if (points.isEmpty) return;
     final paint = strokePaint()..strokeWidth = _width;
     if (marker) {
