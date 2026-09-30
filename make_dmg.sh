@@ -180,13 +180,17 @@ ditto "$APP_PATH" "$STAGING/Show Shot.app"
 ln -s /Applications "$STAGING/Applications"
 ok "Conteúdo preparado"
 
-# ----------------------------------------------------------------------------
+# ------------------------------------------------------------------------
 # ETAPA 7 — Criar o DMG
-# UDZO = imagem compactada (zlib), somente leitura — o formato padrão para
-# distribuir apps. -ov sobrescreve; -srcfolder usa a pasta montada acima.
-# ----------------------------------------------------------------------------
+# Delegado a dmg_layout.sh: cria uma imagem gravável, pede ao Finder a janela
+# customizada (fundo com a seta, app à esquerda, atalho de Aplicativos à
+# direita) e comprime no formato final UDZO (somente leitura, o padrão para
+# distribuir apps). Se o Finder não puder ser controlado, o DMG sai igual,
+# só sem o visual (o script avisa).
+# Na primeira vez o macOS pede permissão para o Terminal controlar o Finder.
+# ------------------------------------------------------------------------
 step "7. Criando o DMG"
-hdiutil create -volname "$VOLUME_NAME" -srcfolder "$STAGING" -ov -format UDZO "$DMG_PATH" >/dev/null
+./dmg_layout.sh "$STAGING" "$VOLUME_NAME" "$DMG_PATH"
 ok "Criado: $DMG_PATH"
 
 # ----------------------------------------------------------------------------

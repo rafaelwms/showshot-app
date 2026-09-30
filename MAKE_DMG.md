@@ -103,7 +103,7 @@ O resultado fica em `dist/ShowShot-<versão>.dmg`, junto com um arquivo `.sha256
 | 4 | Valida o `.app`: assinatura íntegra, Developer ID, notarizado | Pega um app exportado do jeito errado antes de perder tempo |
 | 5 | Versão e pasta de saída | Nome do arquivo: `ShowShot-1.0.0.dmg` |
 | 6 | Monta o conteúdo com `ditto` + atalho `/Applications` | O `ditto` preserva a assinatura do bundle |
-| 7 | Cria a imagem (`hdiutil`, formato UDZO compactado) | Formato padrão de distribuição |
+| 7 | Cria a imagem pelo `dmg_layout.sh`: janela 660×400 com o fundo (`artwork/dmg/`), o app à esquerda, o atalho de Aplicativos à direita e uma seta entre eles; depois comprime em UDZO | Visual de "arraste para instalar". Na 1ª vez o macOS pede permissão para o Terminal controlar o Finder (sem ela o DMG sai sem o fundo) |
 | 8 | Assina o DMG com `--timestamp` | A Apple recomenda assinar o contêiner; a notarização exige o timestamp |
 | 9 | Envia para notarização e espera | Se recusar, mostra o log da Apple com o motivo |
 | 10 | Grampeia o ticket no DMG | Validação funciona offline |
@@ -132,4 +132,7 @@ O resultado fica em `dist/ShowShot-<versão>.dmg`, junto com um arquivo `.sha256
 | Etapa 4: assinatura inválida | O `.app` foi alterado depois de assinado (ou copiado com `cp`). Exporte de novo. |
 | Etapa 9: "Invalid" | O log mostra o arquivo exato. Os motivos mais comuns são binário sem *hardened runtime* ou sem timestamp; exportar pelo Xcode resolve os dois. |
 | Xcode: "Hardened Runtime is Not Enabled" | `ENABLE_HARDENED_RUNTIME = YES` precisa estar nas configurações do target Runner (`macos/Runner.xcodeproj/project.pbxproj`) — já está, desde 2026-09-24. Se voltar, confira se um merge não removeu. |
-| Aviso `hdiutil … is deprecated` | Só um aviso do macOS 27. O `hdiutil` continua funcionando. |
+| Aviso `hdiutil … is deprecated` | Só um aviso do macOS 27. O `hdiutil` continua funcionando (o `dmg_layout.sh` já o filtra). |
+| "O Finder não pôde ser controlado" | Autorize em Ajustes do Sistema → Privacidade e Segurança → Automação (Terminal → Finder) e rode de novo. |
+| "Já existe um volume 'Show Shot' montado" | Ejete o volume no Finder antes de gerar o DMG. |
+| Quero mudar a arte do fundo | Edite `artwork/dmg/background.png` e `background@2x.png` (660×400 e 1320×800) e recrie o TIFF: `tiffutil -cathidpicheck background.png background@2x.png -out background.tiff`. Os rótulos dos ícones são pretos (o Finder decide e não dá para mudar), por isso a arte escura tem duas pílulas claras atrás dos nomes; se mudar a posição dos ícones em `dmg_layout.sh`, mova as pílulas na arte. |
