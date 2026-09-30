@@ -56,6 +56,15 @@ class NativePlatformInfo {
   );
 }
 
+/// How the OS started the process, for what the command line can't say:
+/// macOS login items carry no arguments.
+class NativeLaunchInfo {
+  const NativeLaunchInfo({this.atLogin = false});
+
+  /// True when the OS launched the app as a login item.
+  final bool atLogin;
+}
+
 /// Thin typed wrapper around the `shoshot/native` method channel implemented
 /// in each platform runner.
 class NativeBridge {
@@ -231,6 +240,17 @@ class NativeBridge {
       );
     } on MissingPluginException {
       return null;
+    }
+  }
+
+  /// Launch details only the native side can see (see [NativeLaunchInfo]).
+  /// Platforms that don't implement it report a plain, non-login launch.
+  Future<NativeLaunchInfo> launchInfo() async {
+    try {
+      final map = await _channel.invokeMapMethod<String, Object?>('launchInfo');
+      return NativeLaunchInfo(atLogin: map?['atLogin'] == true);
+    } on MissingPluginException {
+      return const NativeLaunchInfo();
     }
   }
 

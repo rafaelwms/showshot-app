@@ -97,6 +97,14 @@ class CaptureFlow extends ChangeNotifier with WindowListener {
   EditorDocument? get document => _document;
   bool get busy => _busy;
   bool get permissionMissing => _permissionMissing;
+
+  /// Debug automation: shows/hides the "screen recording permission" banner on
+  /// Home without going through the OS permission prompt.
+  set debugPermissionMissing(bool value) {
+    _permissionMissing = value;
+    notifyListeners();
+  }
+
   FlowMessage? get lastMessage => _lastMessage;
 
   NavigatorState? get _navigator => navigatorKey.currentState;
@@ -121,8 +129,18 @@ class CaptureFlow extends ChangeNotifier with WindowListener {
   // Entry points
   // ---------------------------------------------------------------------------
 
-  Future<void> start(CaptureMode mode) async {
+  /// [fromHome] is true only when the capture was started by clicking a card
+  /// on the Home window itself; hotkeys and the tray menu leave it false.
+  /// Whether to bring Home back afterwards is decided by that, not by
+  /// whether the window happens to be visible: a Home window left open
+  /// behind other windows (or on another Space) is still "visible" to the OS,
+  /// and would otherwise pop back up after every hotkey capture.
+  Future<void> start(CaptureMode mode, {bool fromHome = false}) async {
     if (_busy || _stage == FlowStage.overlay) return;
+    // Set before closing the editor below: closeEditor() ends in _finish(),
+    // which reads it, and it should follow *this* capture's origin rather
+    // than a stale value from whichever capture opened that editor.
+    _returnToHome = fromHome;
     if (_stage == FlowStage.editor) {
       // A new capture replaces the one being edited.
       await closeEditor();
@@ -131,7 +149,6 @@ class CaptureFlow extends ChangeNotifier with WindowListener {
     _setStage(FlowStage.capturing);
     try {
       final wasVisible = await windowManager.isVisible();
-      _returnToHome = wasVisible;
       if (wasVisible) {
         await windowManager.hide();
         // Give the compositor a moment to remove our window from the screen.
@@ -336,6 +353,14 @@ class CaptureFlow extends ChangeNotifier with WindowListener {
     await _settle();
     await windowManager.show();
     await windowManager.focus();
+  }
+
+  /// Debug automation: opens the editor on a synthetic [session] instead of a
+  /// real screen capture, so the editor can be driven without the OS screen
+  /// recording permission (see the `demo` command in `debug_server.dart`).
+  Future<void> debugOpenEditor(CaptureSession session) async {
+    _session = session;
+    await _openEditor(session.image.clone(), session);
   }
 
   Size _editorWindowSize(ui.Image image, CaptureSession session) {

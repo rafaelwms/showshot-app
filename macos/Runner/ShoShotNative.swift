@@ -127,6 +127,10 @@ final class ShoShotNative: NSObject {
       result(resolveDirectoryBookmark(data))
     case "getSystemAccent":
       result(currentAccentARGB())
+    case "launchInfo":
+      // `SMAppService` login items can't carry command-line arguments, so
+      // this is how Dart learns the app was launched at login.
+      result(["atLogin": AppDelegate.launchedAsLoginItem])
     case "recognizeText":
       guard let png = (args["png"] as? FlutterStandardTypedData)?.data else {
         result(nil)
@@ -390,6 +394,7 @@ final class ShoShotNative: NSObject {
     let h = min(height, visible.height - 40)
     let frame = NSRect(x: visible.midX - w / 2, y: visible.midY - h / 2, width: w, height: h)
     window.setFrame(frame, display: true)
+    (window as? MainFlutterWindow)?.layoutTrafficLights()
   }
 
   // MARK: - Text recognition

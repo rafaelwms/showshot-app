@@ -346,7 +346,9 @@ class _EditorScreenState extends State<EditorScreen> {
                       ),
                     ),
                     child: Padding(
-                      padding: const EdgeInsets.only(top: 44),
+                      padding: const EdgeInsets.only(
+                        top: WindowTitleBar.defaultHeight,
+                      ),
                       child: _buildViewport(controller),
                     ),
                   ),
@@ -359,7 +361,7 @@ class _EditorScreenState extends State<EditorScreen> {
                 ),
                 Positioned(
                   left: 14,
-                  top: 64,
+                  top: WindowTitleBar.defaultHeight + 20,
                   bottom: 84,
                   child: Center(child: ToolRail(controller: controller)),
                 ),
@@ -540,6 +542,9 @@ class _EditorCanvasState extends State<_EditorCanvas> {
     switch (controller.tool) {
       case ToolType.select:
         final p = _hover;
+        if (p != null && controller.isOverRotationHandle(p)) {
+          return SystemMouseCursors.grab;
+        }
         if (p != null && controller.isOverHandle(p)) {
           return SystemMouseCursors.precise;
         }
@@ -602,16 +607,21 @@ class _EditorCanvasState extends State<_EditorCanvas> {
                 Positioned(
                   left: editing.position.dx - 6,
                   top: editing.position.dy - 6,
-                  child: _TextEditorBox(
-                    key: ValueKey(editing.id),
-                    annotation: editing,
-                    maxWidth: (size.width - editing.position.dx + 6).clamp(
-                      120.0,
-                      size.width,
+                  // Rotated text is edited rotated too, around its center
+                  // (which is what the finished annotation turns around).
+                  child: Transform.rotate(
+                    angle: editing.rotation,
+                    child: _TextEditorBox(
+                      key: ValueKey(editing.id),
+                      annotation: editing,
+                      maxWidth: (size.width - editing.position.dx + 6).clamp(
+                        120.0,
+                        size.width,
+                      ),
+                      onChanged: controller.updateEditingText,
+                      onCommit: controller.commitTextEditing,
+                      onCancel: controller.cancelTextEditing,
                     ),
-                    onChanged: controller.updateEditingText,
-                    onCommit: controller.commitTextEditing,
-                    onCancel: controller.cancelTextEditing,
                   ),
                 ),
             ],

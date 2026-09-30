@@ -18,10 +18,21 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  // The capture column scrolls on its own (see `build`); it needs its own
+  // controller because the recent-captures grid beside it already claims the
+  // PrimaryScrollController.
+  final _captureScroll = ScrollController();
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _showPendingMessage());
+  }
+
+  @override
+  void dispose() {
+    _captureScroll.dispose();
+    super.dispose();
   }
 
   void _showPendingMessage() {
@@ -99,7 +110,16 @@ class _HomeScreenState extends State<HomeScreen> {
                             ? Row(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Expanded(flex: 11, child: left),
+                                  // Scrolls only when it has to: with the
+                                  // permission banner up, the four cards no
+                                  // longer fit the default 960x640 window.
+                                  Expanded(
+                                    flex: 11,
+                                    child: SingleChildScrollView(
+                                      controller: _captureScroll,
+                                      child: left,
+                                    ),
+                                  ),
                                   const SizedBox(width: 28),
                                   Expanded(flex: 8, child: right),
                                 ],
@@ -180,7 +200,7 @@ class _CaptureColumn extends StatelessWidget {
             hotKeyText: hotKeyLabel(settings.hotKeys[mode]),
             hotKeyFailed: services.hotkeys.failed.contains(mode),
             enabled: !flow.busy,
-            onTap: () => flow.start(mode),
+            onTap: () => flow.start(mode, fromHome: true),
           ),
           const SizedBox(height: 10),
         ],

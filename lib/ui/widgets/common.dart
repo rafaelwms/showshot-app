@@ -275,9 +275,13 @@ class WindowTitleBar extends StatelessWidget {
     this.title,
     this.leading,
     this.trailing,
-    this.height = 44,
+    this.height = defaultHeight,
     this.onClose,
   });
+
+  /// Keep in sync with `MainFlutterWindow.titleBarHeight` (macOS runner),
+  /// which centres the system window buttons in a bar of this height.
+  static const defaultHeight = 56.0;
 
   final Widget? title;
   final Widget? leading;
@@ -307,46 +311,50 @@ class WindowTitleBar extends StatelessWidget {
               },
             ),
           ),
-          Padding(
-            padding: EdgeInsets.only(left: isMac ? 80 : 14, right: 8),
-            child: Row(
-              children: [
-                if (leading != null) ...[leading!, const SizedBox(width: 10)],
-                if (title != null)
-                  DefaultTextStyle(
-                    style: TextStyle(
-                      color: context.palette.textMuted,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 0.2,
+          // Fill the bar so the row is centered in it: a non-positioned Stack
+          // child is only as tall as its content and would hug the top edge.
+          Positioned.fill(
+            child: Padding(
+              padding: EdgeInsets.only(left: isMac ? 80 : 14, right: 12),
+              child: Row(
+                children: [
+                  if (leading != null) ...[leading!, const SizedBox(width: 10)],
+                  if (title != null)
+                    DefaultTextStyle(
+                      style: TextStyle(
+                        color: context.palette.textMuted,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.2,
+                      ),
+                      child: title!,
                     ),
-                    child: title!,
-                  ),
-                const Spacer(),
-                ?trailing,
-                if (!isMac) ...[
-                  const SizedBox(width: 8),
-                  _WindowButton(
-                    icon: Icons.remove_rounded,
-                    onTap: () => windowManager.minimize(),
-                  ),
-                  _WindowButton(
-                    icon: Icons.crop_square_rounded,
-                    onTap: () async {
-                      if (await windowManager.isMaximized()) {
-                        await windowManager.unmaximize();
-                      } else {
-                        await windowManager.maximize();
-                      }
-                    },
-                  ),
-                  _WindowButton(
-                    icon: Icons.close_rounded,
-                    danger: true,
-                    onTap: onClose ?? () => windowManager.close(),
-                  ),
+                  const Spacer(),
+                  ?trailing,
+                  if (!isMac) ...[
+                    const SizedBox(width: 8),
+                    _WindowButton(
+                      icon: Icons.remove_rounded,
+                      onTap: () => windowManager.minimize(),
+                    ),
+                    _WindowButton(
+                      icon: Icons.crop_square_rounded,
+                      onTap: () async {
+                        if (await windowManager.isMaximized()) {
+                          await windowManager.unmaximize();
+                        } else {
+                          await windowManager.maximize();
+                        }
+                      },
+                    ),
+                    _WindowButton(
+                      icon: Icons.close_rounded,
+                      danger: true,
+                      onTap: onClose ?? () => windowManager.close(),
+                    ),
+                  ],
                 ],
-              ],
+              ),
             ),
           ),
         ],
