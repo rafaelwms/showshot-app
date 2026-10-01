@@ -363,7 +363,7 @@ class _PermissionBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final strings = Strings.of(context);
-    final native = AppScope.of(context).native;
+    final services = AppScope.of(context);
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -396,17 +396,27 @@ class _PermissionBanner extends StatelessWidget {
           const SizedBox(height: 10),
           Row(
             children: [
-              AccentButton(
-                label: strings.permissionOpenSettings,
-                compact: true,
-                onPressed: native.openScreenAccessSettings,
-              ),
-              const SizedBox(width: 8),
-              GhostButton(
-                label: strings.permissionRequest,
-                compact: true,
-                onPressed: native.requestScreenAccess,
-              ),
+              // Linux has no settings page to send people to; the portal's
+              // own dialog is the whole flow.
+              if (Platform.isLinux)
+                AccentButton(
+                  label: strings.permissionRequest,
+                  compact: true,
+                  onPressed: services.flow.requestScreenAccess,
+                )
+              else ...[
+                AccentButton(
+                  label: strings.permissionOpenSettings,
+                  compact: true,
+                  onPressed: services.native.openScreenAccessSettings,
+                ),
+                const SizedBox(width: 8),
+                GhostButton(
+                  label: strings.permissionRequest,
+                  compact: true,
+                  onPressed: services.flow.requestScreenAccess,
+                ),
+              ],
             ],
           ),
         ],

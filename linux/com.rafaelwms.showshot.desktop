@@ -2,8 +2,11 @@
 Type=Application
 Name=Show Shot
 Comment=Capture, annotate and share screenshots
+Comment[pt_BR]=Capture, anote e compartilhe capturas de tela
+Keywords=screenshot;capture;annotate;ocr;print;captura;tela;
 Exec=shoshot
 Icon=com.rafaelwms.showshot
 Terminal=false
-Categories=Utility;Graphics;
+Categories=Graphics;
+StartupNotify=true
 StartupWMClass=com.rafaelwms.showshot

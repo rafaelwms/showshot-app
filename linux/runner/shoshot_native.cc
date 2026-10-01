@@ -453,6 +453,9 @@ void ExitOverlay(NativeState* state, double width, double height) {
   auto monitors = EnumerateMonitors();
   const MonitorEntry* m = FindMonitor(monitors, state->overlay_monitor);
   gtk_window_unfullscreen(state->window);
+  // A window that was maximized before the overlay (a big editor that
+  // GNOME auto-maximized) would otherwise return to that state.
+  gtk_window_unmaximize(state->window);
   gtk_window_set_keep_above(state->window, FALSE);
   gtk_window_set_skip_taskbar_hint(state->window, FALSE);
   gtk_window_set_decorated(state->window, state->saved_decorated);
@@ -600,14 +603,20 @@ void InitSystemAccent(NativeState* state) {
 // the `Screenshot` call itself just registers the request and hands back a
 // `Request` object path; the actual result (a PNG written to a temp file)
 // arrives later on that object's `Response` signal, since a real desktop
-// may show an interactive picker first. We ask for `interactive: false` so
-// GNOME takes the shot immediately with no dialog.
+// may show UI first. With `interactive: false` GNOME takes the shot
+// immediately — except the very first time, when it shows a one-time
+// access dialog (see `requestScreenAccess`).
 // ---------------------------------------------------------------------------
+
+constexpr const char* kPortalBus = "org.freedesktop.portal.Desktop";
+constexpr const char* kPortalPath = "/org/freedesktop/portal/desktop";
 
 struct PortalScreenshotRequest {
   FlMethodCall* call = nullptr;
   GDBusConnection* bus = nullptr;
   guint signal_id = 0;
+  // Only report success/failure (a permission probe), don't send the PNG.
+  bool probe = false;
 };
 
 void OnScreenshotResponse(GDBusConnection*, const gchar*, const gchar*,
@@ -620,7 +629,20 @@ void OnScreenshotResponse(GDBusConnection*, const gchar*, const gchar*,
     g_variant_get(parameters, "(u@a{sv})", &response_code, &results);
 
     g_autoptr(FlMethodResponse) response = nullptr;
-    if (response_code == 0 && results != nullptr) {
+    if (req->probe) {
+      // Still delete the file the portal wrote for us.
+      g_autoptr(GVariant) uri_variant =
+          results != nullptr
+              ? g_variant_lookup_value(results, "uri", G_VARIANT_TYPE_STRING)
+              : nullptr;
+      if (uri_variant != nullptr) {
+        g_autofree gchar* path = g_filename_from_uri(
+            g_variant_get_string(uri_variant, nullptr), nullptr, nullptr);
+        if (path != nullptr) remove(path);
+      }
+      g_autoptr(FlValue) granted = fl_value_new_bool(response_code == 0);
+      response = FL_METHOD_RESPONSE(fl_method_success_response_new(granted));
+    } else if (response_code == 0 && results != nullptr) {
       g_autoptr(GVariant) uri_variant =
           g_variant_lookup_value(results, "uri", G_VARIANT_TYPE_STRING);
       gchar* path = uri_variant != nullptr
@@ -662,7 +684,10 @@ void OnScreenshotResponse(GDBusConnection*, const gchar*, const gchar*,
   delete req;
 }
 
-void StartScreenshotPortal(NativeState* state, FlMethodCall* call) {
+// `interactive` lets the desktop show its own screenshot UI (GNOME: pick
+// area / window / screen) and returns whatever the user took with it.
+void StartScreenshotPortal(NativeState* state, FlMethodCall* call,
+                           bool interactive, bool probe) {
   if (state->session_bus == nullptr) {
     g_autoptr(FlMethodResponse) response = FL_METHOD_RESPONSE(
         fl_method_error_response_new("unsupported", "no session bus", nullptr));
@@ -678,18 +703,40 @@ void StartScreenshotPortal(NativeState* state, FlMethodCall* call) {
   g_variant_builder_add(&options, "{sv}", "handle_token",
                         g_variant_new_string(token));
   g_variant_builder_add(&options, "{sv}", "interactive",
-                        g_variant_new_boolean(FALSE));
+                        g_variant_new_boolean(interactive));
+
+  // The Response signal can in principle race the method reply, so subscribe
+  // to the path the portal will use *before* calling (the spec'd pattern):
+  // /org/freedesktop/portal/desktop/request/<sender>/<token>.
+  g_autofree gchar* sender =
+      g_strdup(g_dbus_connection_get_unique_name(state->session_bus) + 1);
+  for (gchar* c = sender; *c != '\0'; c++) {
+    if (*c == '.') *c = '_';
+  }
+  g_autofree gchar* expected_path = g_strdup_printf(
+      "/org/freedesktop/portal/desktop/request/%s/%s", sender, token);
+  auto* req = new PortalScreenshotRequest();
+  req->call = FL_METHOD_CALL(g_object_ref(call));
+  req->bus = state->session_bus;
+  req->probe = probe;
+  req->signal_id = g_dbus_connection_signal_subscribe(
+      state->session_bus, kPortalBus, "org.freedesktop.portal.Request",
+      "Response", expected_path, nullptr, G_DBUS_SIGNAL_FLAGS_NONE,
+      OnScreenshotResponse, req, nullptr);
 
   g_autoptr(GError) error = nullptr;
   g_autoptr(GVariant) reply = g_dbus_connection_call_sync(
-      state->session_bus, "org.freedesktop.portal.Desktop",
-      "/org/freedesktop/portal/desktop", "org.freedesktop.portal.Screenshot",
-      "Screenshot", g_variant_new("(sa{sv})", "", &options),
-      G_VARIANT_TYPE("(o)"), G_DBUS_CALL_FLAGS_NONE, 5000, nullptr, &error);
+      state->session_bus, kPortalBus, kPortalPath,
+      "org.freedesktop.portal.Screenshot", "Screenshot",
+      g_variant_new("(sa{sv})", "", &options), G_VARIANT_TYPE("(o)"),
+      G_DBUS_CALL_FLAGS_NONE, 5000, nullptr, &error);
 
   const gchar* handle_path = nullptr;
   if (reply != nullptr) g_variant_get(reply, "(&o)", &handle_path);
   if (handle_path == nullptr) {
+    g_dbus_connection_signal_unsubscribe(state->session_bus, req->signal_id);
+    g_object_unref(req->call);
+    delete req;
     g_autoptr(FlMethodResponse) response =
         FL_METHOD_RESPONSE(fl_method_error_response_new(
             "capture_failed",
@@ -698,14 +745,53 @@ void StartScreenshotPortal(NativeState* state, FlMethodCall* call) {
     fl_method_call_respond(call, response, nullptr);
     return;
   }
+  if (g_strcmp0(handle_path, expected_path) != 0) {
+    // Very old portals (< 0.9) picked their own path; follow it.
+    g_dbus_connection_signal_unsubscribe(state->session_bus, req->signal_id);
+    req->signal_id = g_dbus_connection_signal_subscribe(
+        state->session_bus, kPortalBus, "org.freedesktop.portal.Request",
+        "Response", handle_path, nullptr, G_DBUS_SIGNAL_FLAGS_NONE,
+        OnScreenshotResponse, req, nullptr);
+  }
+}
 
-  auto* req = new PortalScreenshotRequest();
-  req->call = FL_METHOD_CALL(g_object_ref(call));
-  req->bus = state->session_bus;
-  req->signal_id = g_dbus_connection_signal_subscribe(
-      state->session_bus, "org.freedesktop.portal.Desktop",
-      "org.freedesktop.portal.Request", "Response", handle_path, nullptr,
-      G_DBUS_SIGNAL_FLAGS_NONE, OnScreenshotResponse, req, nullptr);
+// ---------------------------------------------------------------------------
+// Screenshot permission (Wayland). GNOME asks once per app, and only lets the
+// *focused* app show that dialog — so the Dart side asks while the Home
+// window is up, before hiding it for a capture. The grant is stored in the
+// portal's permission store (table "screenshot", id "screenshot") under our
+// registered app ID.
+// ---------------------------------------------------------------------------
+
+// "yes", "no", or "" (never asked / unknown).
+std::string ScreenshotPermission(NativeState* state) {
+  if (state->session_bus == nullptr) return "";
+  g_autoptr(GError) error = nullptr;
+  g_autoptr(GVariant) reply = g_dbus_connection_call_sync(
+      state->session_bus, "org.freedesktop.impl.portal.PermissionStore",
+      "/org/freedesktop/impl/portal/PermissionStore",
+      "org.freedesktop.impl.portal.PermissionStore", "Lookup",
+      g_variant_new("(ss)", "screenshot", "screenshot"),
+      G_VARIANT_TYPE("(a{sas}v)"), G_DBUS_CALL_FLAGS_NONE, 1000, nullptr,
+      &error);
+  if (reply == nullptr) return "";
+  g_autoptr(GVariant) apps = g_variant_get_child_value(reply, 0);
+  g_autofree const gchar** values = nullptr;
+  if (!g_variant_lookup(apps, APPLICATION_ID, "^a&s", &values) ||
+      values == nullptr || values[0] == nullptr) {
+    return "";
+  }
+  return values[0];
+}
+
+void ForgetScreenshotPermission(NativeState* state) {
+  if (state->session_bus == nullptr) return;
+  g_autoptr(GVariant) reply = g_dbus_connection_call_sync(
+      state->session_bus, "org.freedesktop.impl.portal.PermissionStore",
+      "/org/freedesktop/impl/portal/PermissionStore",
+      "org.freedesktop.impl.portal.PermissionStore", "DeletePermission",
+      g_variant_new("(sss)", "screenshot", "screenshot", APPLICATION_ID),
+      nullptr, G_DBUS_CALL_FLAGS_NONE, 1000, nullptr, nullptr);
 }
 
 // ---------------------------------------------------------------------------
@@ -726,8 +812,10 @@ void MethodCallHandler(FlMethodChannel*, FlMethodCall* call,
     fl_value_set_string_take(map, "supportsWindowList", fl_value_new_bool(x11));
     fl_value_set_string_take(map, "supportsNativeCapture",
                              fl_value_new_bool(x11));
+    // Wayland: the screenshot portal needs a one-time grant (see
+    // ScreenshotPermission); X11 can read the root window freely.
     fl_value_set_string_take(map, "needsScreenPermission",
-                             fl_value_new_bool(false));
+                             fl_value_new_bool(IsWayland()));
     fl_value_set_string_take(map, "wayland", fl_value_new_bool(IsWayland()));
     response = FL_METHOD_RESPONSE(fl_method_success_response_new(map));
   } else if (strcmp(method, "getDisplays") == 0) {
@@ -754,7 +842,16 @@ void MethodCallHandler(FlMethodChannel*, FlMethodCall* call,
           "unsupported", "Native capture requires X11", nullptr));
     }
   } else if (strcmp(method, "captureScreenshotPortal") == 0) {
-    StartScreenshotPortal(state, call);
+    FlValue* interactive =
+        args != nullptr && fl_value_get_type(args) == FL_VALUE_TYPE_MAP
+            ? fl_value_lookup_string(args, "interactive")
+            : nullptr;
+    StartScreenshotPortal(
+        state, call,
+        interactive != nullptr &&
+            fl_value_get_type(interactive) == FL_VALUE_TYPE_BOOL &&
+            fl_value_get_bool(interactive),
+        false);
     return;  // Responds asynchronously once the portal's Response arrives.
   } else if (strcmp(method, "listWindows") == 0) {
 #ifdef GDK_WINDOWING_X11
@@ -780,10 +877,28 @@ void MethodCallHandler(FlMethodChannel*, FlMethodCall* call,
                                 (int)ArgInt(args, "height", 0));
     g_autoptr(FlValue) v = fl_value_new_bool(ok);
     response = FL_METHOD_RESPONSE(fl_method_success_response_new(v));
-  } else if (strcmp(method, "hasScreenAccess") == 0 ||
-             strcmp(method, "requestScreenAccess") == 0) {
-    g_autoptr(FlValue) v = fl_value_new_bool(true);
+  } else if (strcmp(method, "hasScreenAccess") == 0) {
+    g_autoptr(FlValue) v =
+        fl_value_new_bool(!IsWayland() || ScreenshotPermission(state) == "yes");
     response = FL_METHOD_RESPONSE(fl_method_success_response_new(v));
+  } else if (strcmp(method, "requestScreenAccess") == 0) {
+    if (!IsWayland()) {
+      g_autoptr(FlValue) v = fl_value_new_bool(true);
+      response = FL_METHOD_RESPONSE(fl_method_success_response_new(v));
+    } else {
+      // A remembered "no" makes the portal fail silently forever; when the
+      // user explicitly asks again, forget it so GNOME shows the dialog.
+      FlValue* reset =
+          args != nullptr && fl_value_get_type(args) == FL_VALUE_TYPE_MAP
+              ? fl_value_lookup_string(args, "reset")
+              : nullptr;
+      if (reset != nullptr && fl_value_get_type(reset) == FL_VALUE_TYPE_BOOL &&
+          fl_value_get_bool(reset) && ScreenshotPermission(state) == "no") {
+        ForgetScreenshotPermission(state);
+      }
+      StartScreenshotPortal(state, call, false, true);
+      return;  // Responds once the user answered the access dialog.
+    }
   } else if (strcmp(method, "openScreenAccessSettings") == 0 ||
              strcmp(method, "setDockIconVisible") == 0) {
     response = FL_METHOD_RESPONSE(fl_method_success_response_new(nullptr));
@@ -810,6 +925,33 @@ void MethodCallHandler(FlMethodChannel*, FlMethodCall* call,
 }
 
 }  // namespace
+
+void shoshot_register_host_app_id(const char* app_id) {
+  // Sandboxed builds (Flatpak/Snap) get their app ID from the sandbox; the
+  // portal rejects this call there, so don't bother.
+  if (g_file_test("/.flatpak-info", G_FILE_TEST_EXISTS) ||
+      g_getenv("SNAP") != nullptr) {
+    return;
+  }
+  g_autoptr(GError) error = nullptr;
+  g_autoptr(GDBusConnection) bus =
+      g_bus_get_sync(G_BUS_TYPE_SESSION, nullptr, &error);
+  if (bus == nullptr) return;
+  GVariantBuilder options;
+  g_variant_builder_init(&options, G_VARIANT_TYPE_VARDICT);
+  g_autoptr(GVariant) reply = g_dbus_connection_call_sync(
+      bus, "org.freedesktop.portal.Desktop", "/org/freedesktop/portal/desktop",
+      "org.freedesktop.host.portal.Registry", "Register",
+      g_variant_new("(sa{sv})", app_id, &options), nullptr,
+      G_DBUS_CALL_FLAGS_NONE, 2000, nullptr, &error);
+  if (reply == nullptr) {
+    // Older portals (< 1.19) have no registry: permissions then get keyed by
+    // whatever the portal infers (systemd scope), which still works, just
+    // less predictably.
+    g_message("Show Shot: portal app-id registration unavailable (%s)",
+              error ? error->message : "unknown error");
+  }
+}
 
 void shoshot_native_register(GtkWindow* window, FlView* view) {
   if (g_state != nullptr) return;

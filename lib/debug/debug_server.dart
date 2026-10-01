@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
+import 'package:window_manager/window_manager.dart';
 
 import '../core/app_scope.dart';
 import '../flow/capture_flow.dart';
@@ -209,6 +210,15 @@ class DebugCommandServer {
           return 'ok';
         case 'stage':
           return 'stage=${flow.stage.name} session=${flow.session != null} document=${flow.document != null}';
+        case 'winfo':
+          Future<String> probe(Future<Object?> Function() read) => read()
+              .timeout(const Duration(seconds: 1))
+              .then((v) => '$v', onError: (Object e) => '?');
+          return 'bounds=${await probe(windowManager.getBounds)} '
+              'visible=${await probe(windowManager.isVisible)} '
+              'fullScreen=${await probe(windowManager.isFullScreen)} '
+              'maximized=${await probe(windowManager.isMaximized)} '
+              'focused=${await probe(windowManager.isFocused)}';
         case 'quit':
           await flow.quit();
           return 'bye';

@@ -29,6 +29,8 @@ class _EditorScreenState extends State<EditorScreen> {
   final _focusNode = FocusNode();
   final _viewportKey = GlobalKey();
   bool _fitted = false;
+  Size? _fittedSize;
+  Matrix4? _autoFitMatrix;
   bool _busy = false;
   bool _wasEditingText = false;
 
@@ -53,6 +55,8 @@ class _EditorScreenState extends State<EditorScreen> {
         _ => _save(),
       };
       _fitted = false;
+      _fittedSize = null;
+      _autoFitMatrix = null;
       if (document.autoSave) {
         WidgetsBinding.instance.addPostFrameCallback(
           (_) => _save(forceDialog: true),
@@ -480,11 +484,20 @@ class _EditorScreenState extends State<EditorScreen> {
     return LayoutBuilder(
       key: _viewportKey,
       builder: (context, constraints) {
-        if (!_fitted && constraints.biggest.width > 0) {
+        // Fit on first layout, and again whenever the viewport changes size
+        // while the user hasn't zoomed/panned yet — the window often settles
+        // after the editor is first laid out (e.g. GNOME auto-maximizes a
+        // window created close to the screen size).
+        final size = constraints.biggest;
+        final untouched =
+            !_fitted || controller.transformation.value == _autoFitMatrix;
+        if (untouched && size.width > 0 && size != _fittedSize) {
           _fitted = true;
-          WidgetsBinding.instance.addPostFrameCallback(
-            (_) => controller.fitTo(constraints.biggest),
-          );
+          _fittedSize = size;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            controller.fitTo(size);
+            _autoFitMatrix = controller.transformation.value.clone();
+          });
         }
         return Listener(
           // Two-finger trackpad scroll pans even while a drawing tool is active.

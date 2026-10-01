@@ -132,21 +132,36 @@ class CaptureFlow extends ChangeNotifier with WindowListener {
     try {
       final wasVisible = await windowManager.isVisible();
       _returnToHome = wasVisible;
-      if (wasVisible) {
+
+      final info = await native.platformInfo();
+      if (info.needsScreenPermission && !await native.hasScreenAccess()) {
+        if (Platform.isLinux) {
+          // GNOME shows its one-time screenshot access dialog only for the
+          // *focused* app, so ask with our window up — before hiding it —
+          // and carry on with the capture once the user allowed it.
+          await showHome();
+          _returnToHome = wasVisible;
+          if (!await native.requestScreenAccess()) {
+            _permissionMissing = true;
+            _setStage(FlowStage.idle);
+            return;
+          }
+        } else {
+          // macOS: the grant only takes effect after a restart.
+          await native.requestScreenAccess();
+          _permissionMissing = true;
+          _setStage(FlowStage.idle);
+          await showHome();
+          return;
+        }
+      }
+      _permissionMissing = false;
+
+      if (await windowManager.isVisible()) {
         await windowManager.hide();
         // Give the compositor a moment to remove our window from the screen.
         await Future<void>.delayed(const Duration(milliseconds: 220));
       }
-
-      final info = await native.platformInfo();
-      if (info.needsScreenPermission && !await native.hasScreenAccess()) {
-        await native.requestScreenAccess();
-        _permissionMissing = true;
-        _setStage(FlowStage.idle);
-        await showHome();
-        return;
-      }
-      _permissionMissing = false;
 
       final session = await capture.captureUnderCursor(mode);
       _session = session;
@@ -165,6 +180,10 @@ class CaptureFlow extends ChangeNotifier with WindowListener {
       debugPrint('Capture failed: $error\n$stack');
       _session?.dispose();
       _session = null;
+      // Access revoked since we last checked (e.g. in GNOME Settings)?
+      final info = await native.platformInfo();
+      _permissionMissing =
+          info.needsScreenPermission && !await native.hasScreenAccess();
       _lastMessage = const FlowMessage(FlowMessageKind.captureFailed);
       _setStage(FlowStage.idle);
       await showHome();
@@ -286,6 +305,9 @@ class CaptureFlow extends ChangeNotifier with WindowListener {
       await _settle();
     }
     if (!await windowManager.isVisible()) {
+      // The editor may have left the window maximized (GNOME auto-maximizes
+      // windows created close to the screen size).
+      if (await windowManager.isMaximized()) await windowManager.unmaximize();
       await windowManager.setSize(homeSize);
       await windowManager.center();
     }
@@ -296,6 +318,19 @@ class CaptureFlow extends ChangeNotifier with WindowListener {
   }
 
   Future<void> openSettings() => showHome(route: '/settings');
+
+  /// The permission banner's "request" button. On Linux the answer applies
+  /// right away (no restart), so the banner can go as soon as it's granted.
+  Future<void> requestScreenAccess() async {
+    if (!Platform.isLinux) {
+      await native.requestScreenAccess();
+      return;
+    }
+    if (await native.requestScreenAccess(reset: true)) {
+      _permissionMissing = false;
+      notifyListeners();
+    }
+  }
 
   Future<void> hideWindow() async {
     if (_stage == FlowStage.overlay) return;

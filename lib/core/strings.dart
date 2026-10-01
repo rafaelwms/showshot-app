@@ -181,15 +181,20 @@ class _Pt extends Strings {
   @override
   String get removeFromList => 'Remover da lista';
   @override
-  String get permissionTitle => 'Permissão de gravação de tela';
+  String get permissionTitle => Platform.isLinux
+      ? 'Permissão para capturar a tela'
+      : 'Permissão de gravação de tela';
   @override
-  String get permissionBody =>
-      'O macOS exige permissão de "Gravação de Tela" para capturar screenshots. '
-      'Depois de autorizar em Ajustes do Sistema, reinicie o Show Shot.';
+  String get permissionBody => Platform.isLinux
+      ? 'O sistema pede uma autorização única antes da primeira captura. '
+            'Clique em "Permitir capturas" e confirme na janela do sistema.'
+      : 'O macOS exige permissão de "Gravação de Tela" para capturar screenshots. '
+            'Depois de autorizar em Ajustes do Sistema, reinicie o Show Shot.';
   @override
   String get permissionOpenSettings => 'Abrir Ajustes do Sistema';
   @override
-  String get permissionRequest => 'Solicitar permissão';
+  String get permissionRequest =>
+      Platform.isLinux ? 'Permitir capturas' : 'Solicitar permissão';
   @override
   String get quit => 'Sair do Show Shot';
   @override
@@ -427,15 +432,20 @@ class _En extends Strings {
   @override
   String get removeFromList => 'Remove from list';
   @override
-  String get permissionTitle => 'Screen recording permission';
+  String get permissionTitle => Platform.isLinux
+      ? 'Screen capture permission'
+      : 'Screen recording permission';
   @override
-  String get permissionBody =>
-      'macOS requires the "Screen Recording" permission to take screenshots. '
-      'After granting it in System Settings, restart Show Shot.';
+  String get permissionBody => Platform.isLinux
+      ? 'Your system asks for a one-time authorization before the first '
+            'capture. Click "Allow captures" and confirm in the system dialog.'
+      : 'macOS requires the "Screen Recording" permission to take screenshots. '
+            'After granting it in System Settings, restart Show Shot.';
   @override
   String get permissionOpenSettings => 'Open System Settings';
   @override
-  String get permissionRequest => 'Request permission';
+  String get permissionRequest =>
+      Platform.isLinux ? 'Allow captures' : 'Request permission';
   @override
   String get quit => 'Quit Show Shot';
   @override

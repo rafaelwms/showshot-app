@@ -150,9 +150,12 @@ class NativeBridge {
 
   /// Linux/Wayland only: `org.freedesktop.portal.Screenshot`, returned as
   /// PNG bytes of the whole screen (the portal has no per-monitor concept).
-  Future<Uint8List> captureScreenshotPortal() async {
+  /// [interactive] lets the desktop show its own screenshot UI first (GNOME:
+  /// pick an area, window or screen) and returns what the user took there.
+  Future<Uint8List> captureScreenshotPortal({bool interactive = false}) async {
     final bytes = await _channel.invokeMethod<Uint8List>(
       'captureScreenshotPortal',
+      {'interactive': interactive},
     );
     if (bytes == null) {
       throw PlatformException(
@@ -202,8 +205,16 @@ class NativeBridge {
   Future<bool> hasScreenAccess() async =>
       await _channel.invokeMethod<bool>('hasScreenAccess') ?? true;
 
-  Future<bool> requestScreenAccess() async =>
-      await _channel.invokeMethod<bool>('requestScreenAccess') ?? true;
+  /// Asks for screen capture access. macOS: shows the system prompt (the
+  /// grant only applies after a restart). Linux/Wayland: shows GNOME's
+  /// one-time screenshot access dialog — only possible while our window is
+  /// focused — and resolves once the user answered; [reset] first forgets an
+  /// earlier "deny", which the portal would otherwise apply silently forever.
+  Future<bool> requestScreenAccess({bool reset = false}) async =>
+      await _channel.invokeMethod<bool>('requestScreenAccess', {
+        'reset': reset,
+      }) ??
+      true;
 
   Future<void> openScreenAccessSettings() =>
       _channel.invokeMethod('openScreenAccessSettings');
