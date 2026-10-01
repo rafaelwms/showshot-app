@@ -1,0 +1,93 @@
+name: shoshot
+description: "Show Shot — capture, annotate and share screenshots on macOS, Windows and Linux."
+
+publish_to: 'none' # Remove this line if you wish to publish to pub.dev
+
+version: 1.2.0+2
+
+environment:
+  sdk: ^3.13.3
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+  window_manager: ^0.5.2
+  tray_manager: ^0.7.0
+  hotkey_manager: ^0.2.3
+  launch_at_startup: ^0.5.1
+  shared_preferences: ^2.5.5
+  file_selector: ^1.1.0
+  path_provider: ^2.1.6
+  image: ^4.10.1
+  flutter_svg: ^2.3.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_lints: ^6.0.0
+  msix: ^3.18.0
+
+# MSIX packaging for Microsoft Store distribution (`dart run msix:create`).
+# identity_name / publisher / publisher_display_name come verbatim from
+# Partner Center > App identity — don't hand-edit without checking there.
+msix_config:
+  display_name: Show Shot
+  publisher_display_name: Rafael WMS
+  identity_name: RafaelWMS.ShowShot
+  publisher: CN=AF042F64-62A1-4E4C-AE05-051096B63CC2
+  msix_version: 1.2.0.0
+  logo_path: artwork/Icon Light.png
+  languages: en-us, pt-br
+  capabilities: runFullTrust
+  store: true
+  # For local sideload testing only (not needed for the Store submission
+  # build): comment out `store: true` above and set `install_certificate:
+  # false`, run `dart run msix:create`, then — from an ELEVATED PowerShell —
+  # trust the generated test certificate and install the package. See the
+  # exact commands in CLAUDE.md / ask Claude to walk through it again.
+
+# hotkey_manager_linux 0.2.0 (the only version on pub.dev) has two
+# use-of-uninitialized-variable bugs in its native plugin code that fail to
+# compile under -Werror on modern clang (see third_party/hotkey_manager_linux
+# for the patched copy and CLAUDE.md for details).
+dependency_overrides:
+  hotkey_manager_linux:
+    path: third_party/hotkey_manager_linux
+
+flutter:
+
+
+  uses-material-design: true
+
+  assets:
+    - assets/tray/
+    - assets/branding/
+
+  # An image asset can refer to one or more resolution-specific "variants", see
+  # https://flutter.dev/to/resolution-aware-images
+
+  # For details regarding adding assets from package dependencies, see
+  # https://flutter.dev/to/asset-from-package
+
+  # To add custom fonts to your application, add a fonts section here,
+  # in this "flutter" section. Each entry in this list should have a
+  # "family" key with the font family name, and a "fonts" key with a
+  # list giving the asset and other descriptors for the font. For
+  # example:
+  # fonts:
+  #   - family: Schyler
+  #     fonts:
+  #       - asset: fonts/Schyler-Regular.ttf
+  #       - asset: fonts/Schyler-Italic.ttf
+  #         style: italic
+  #   - family: Trajan Pro
+  #     fonts:
+  #       - asset: fonts/TrajanPro.ttf
+  #       - asset: fonts/TrajanPro_Bold.ttf
+  #         weight: 700
+  #
+  # For details regarding fonts from package dependencies,
+  # see https://flutter.dev/to/font-from-package

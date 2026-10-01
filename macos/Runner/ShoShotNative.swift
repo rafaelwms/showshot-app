@@ -1,0 +1,492 @@
+import Cocoa
+import FlutterMacOS
+import ImageIO
+import ScreenCaptureKit
+import ServiceManagement
+import UserNotifications
+import Vision
+
+/// Native bridge for ShoShot (macOS).
+///
+/// Exposes screen capture, display/window enumeration, clipboard and overlay
+/// window management to Dart through the `shoshot/native` method channel.
+///
+/// Coordinate system: every global coordinate returned here uses the
+/// CoreGraphics "global display" space (origin at the top-left corner of the
+/// main display, in points). Image pixels are `points * scale`.
+final class ShoShotNative: NSObject {
+  private let window: NSWindow
+  private var channel: FlutterMethodChannel!
+  private var launchChannel: FlutterMethodChannel!
+
+  // Saved window state while the overlay is active.
+  private var isOverlay = false
+  private var savedStyleMask: NSWindow.StyleMask = []
+  private var savedCollectionBehavior: NSWindow.CollectionBehavior = []
+  private var savedLevel: NSWindow.Level = .normal
+  private var savedHasShadow = true
+  private var overlayScreen: NSScreen?
+
+  init(window: NSWindow, messenger: FlutterBinaryMessenger) {
+    self.window = window
+    super.init()
+    channel = FlutterMethodChannel(name: "shoshot/native", binaryMessenger: messenger)
+    channel.setMethodCallHandler { [weak self] call, result in
+      self?.handle(call, result: result)
+    }
+    observeSystemAccent()
+    UNUserNotificationCenter.current().delegate = self
+    // Backs the `launch_at_startup` package using SMAppService (macOS 13+).
+    launchChannel = FlutterMethodChannel(name: "launch_at_startup", binaryMessenger: messenger)
+    launchChannel.setMethodCallHandler { call, result in
+      switch call.method {
+      case "launchAtStartupIsEnabled":
+        result(SMAppService.mainApp.status == .enabled)
+      case "launchAtStartupSetEnabled":
+        let enabled = (call.arguments as? [String: Any])?["setEnabledValue"] as? Bool ?? false
+        do {
+          if enabled {
+            try SMAppService.mainApp.register()
+          } else {
+            try SMAppService.mainApp.unregister()
+          }
+          result(nil)
+        } catch {
+          result(FlutterError(code: "launch_at_login", message: error.localizedDescription, details: nil))
+        }
+      default:
+        result(FlutterMethodNotImplemented)
+      }
+    }
+  }
+
+  // MARK: - Dispatch
+
+  private func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+    let args = call.arguments as? [String: Any] ?? [:]
+    switch call.method {
+    case "platformInfo":
+      result([
+        "globalIsPhysical": false,
+        "supportsWindowList": true,
+        "supportsNativeCapture": true,
+        "needsScreenPermission": true,
+      ])
+    case "getDisplays":
+      result(displays())
+    case "getCursorPosition":
+      let p = CGEvent(source: nil)?.location ?? .zero
+      result(["x": Double(p.x), "y": Double(p.y)])
+    case "captureDisplay":
+      let id = CGDirectDisplayID((args["displayId"] as? Int) ?? Int(CGMainDisplayID()))
+      captureDisplay(id, result: result)
+    case "listWindows":
+      result(listWindows())
+    case "enterOverlay":
+      let id = CGDirectDisplayID((args["displayId"] as? Int) ?? Int(CGMainDisplayID()))
+      enterOverlay(displayId: id)
+      result(nil)
+    case "exitOverlay":
+      let w = (args["width"] as? Double) ?? 1100
+      let h = (args["height"] as? Double) ?? 720
+      exitOverlay(width: w, height: h)
+      result(nil)
+    case "setClipboardImage":
+      guard let png = (args["png"] as? FlutterStandardTypedData)?.data else {
+        result(false)
+        return
+      }
+      result(setClipboardImage(png: png))
+    case "hasScreenAccess":
+      result(CGPreflightScreenCaptureAccess())
+    case "requestScreenAccess":
+      result(CGRequestScreenCaptureAccess())
+    case "openScreenAccessSettings":
+      if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") {
+        NSWorkspace.shared.open(url)
+      }
+      result(nil)
+    case "notify":
+      notify(
+        title: (args["title"] as? String) ?? "",
+        body: (args["body"] as? String) ?? "",
+        result: result)
+    case "setDockIconVisible":
+      let visible = (args["visible"] as? Bool) ?? false
+      NSApp.setActivationPolicy(visible ? .regular : .accessory)
+      result(nil)
+    case "revealFile":
+      if let path = args["path"] as? String {
+        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
+      }
+      result(nil)
+    case "bookmarkDirectory":
+      guard let path = args["path"] as? String else {
+        result(nil)
+        return
+      }
+      result(bookmarkDirectory(path: path))
+    case "resolveDirectoryBookmark":
+      guard let data = (args["bookmark"] as? FlutterStandardTypedData)?.data else {
+        result(nil)
+        return
+      }
+      result(resolveDirectoryBookmark(data))
+    case "getSystemAccent":
+      result(currentAccentARGB())
+    case "launchInfo":
+      // `SMAppService` login items can't carry command-line arguments, so
+      // this is how Dart learns the app was launched at login.
+      result(["atLogin": AppDelegate.launchedAsLoginItem])
+    case "recognizeText":
+      guard let png = (args["png"] as? FlutterStandardTypedData)?.data else {
+        result(nil)
+        return
+      }
+      recognizeText(png: png, result: result)
+    default:
+      result(FlutterMethodNotImplemented)
+    }
+  }
+
+  // MARK: - Save folder (security-scoped bookmark)
+
+  // Under App Sandbox, a folder picked in NSOpenPanel is only writable for the
+  // rest of that launch. A security-scoped bookmark, created while that access
+  // is still live and persisted by Dart, restores it on later launches.
+  private var scopedDirectory: URL?
+
+  private func bookmarkDirectory(path: String) -> FlutterStandardTypedData? {
+    do {
+      let data = try URL(fileURLWithPath: path, isDirectory: true).bookmarkData(
+        options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil)
+      return FlutterStandardTypedData(bytes: data)
+    } catch {
+      NSLog("ShoShot: bookmarkDirectory failed: \(error)")
+      return nil
+    }
+  }
+
+  /// Resolves the bookmark and starts accessing the folder for the rest of the
+  /// launch (only one custom folder is ever active). Returns `{path, bookmark}`
+  /// — `bookmark` is a refreshed copy when the stored one went stale (folder
+  /// moved/renamed), else nil — or nil when it can't be resolved at all.
+  private func resolveDirectoryBookmark(_ data: Data) -> [String: Any]? {
+    var stale = false
+    guard let url = try? URL(resolvingBookmarkData: data, options: .withSecurityScope,
+                             relativeTo: nil, bookmarkDataIsStale: &stale),
+          url.startAccessingSecurityScopedResource() else {
+      return nil
+    }
+    if let previous = scopedDirectory, previous != url {
+      previous.stopAccessingSecurityScopedResource()
+    }
+    scopedDirectory = url
+    var refreshed: FlutterStandardTypedData?
+    if stale {
+      refreshed = bookmarkDirectory(path: url.path)
+    }
+    return ["path": url.path, "bookmark": refreshed as Any]
+  }
+
+  // MARK: - System accent color
+
+  /// `NSColor.controlAccentColor` as a 0xAARRGGBB int for Flutter's `Color`.
+  private func currentAccentARGB() -> Int {
+    let rgb = NSColor.controlAccentColor.usingColorSpace(.deviceRGB) ?? NSColor(
+      deviceRed: 124.0 / 255, green: 92.0 / 255, blue: 255.0 / 255, alpha: 1)
+    let r = Int((rgb.redComponent * 255).rounded())
+    let g = Int((rgb.greenComponent * 255).rounded())
+    let b = Int((rgb.blueComponent * 255).rounded())
+    return (0xFF << 24) | (r << 16) | (g << 8) | b
+  }
+
+  /// The user can change their accent color while the app is running; macOS
+  /// announces that (and light/dark switches) via distributed notifications
+  /// rather than a delegate callback, so we listen for both and re-push
+  /// whenever either fires — cheaper than diffing, and accent reads are
+  /// trivial.
+  private func observeSystemAccent() {
+    let center = DistributedNotificationCenter.default()
+    let handler: (Notification) -> Void = { [weak self] _ in
+      self?.pushSystemAccent()
+    }
+    center.addObserver(forName: NSNotification.Name("AppleColorPreferencesChangedNotification"), object: nil, queue: .main, using: handler)
+    center.addObserver(forName: NSNotification.Name("AppleInterfaceThemeChangedNotification"), object: nil, queue: .main, using: handler)
+  }
+
+  private func pushSystemAccent() {
+    channel.invokeMethod("systemAccentChanged", arguments: currentAccentARGB())
+  }
+
+  // MARK: - Displays
+
+  private func screen(for displayId: CGDirectDisplayID) -> NSScreen? {
+    NSScreen.screens.first { screen in
+      let key = NSDeviceDescriptionKey("NSScreenNumber")
+      return (screen.deviceDescription[key] as? NSNumber)?.uint32Value == displayId
+    }
+  }
+
+  private func displays() -> [[String: Any]] {
+    var count: UInt32 = 0
+    CGGetActiveDisplayList(0, nil, &count)
+    var ids = [CGDirectDisplayID](repeating: 0, count: Int(count))
+    CGGetActiveDisplayList(count, &ids, &count)
+    let main = CGMainDisplayID()
+    return ids.map { id in
+      let bounds = CGDisplayBounds(id)
+      let screen = screen(for: id)
+      return [
+        "id": Int(id),
+        "x": Double(bounds.origin.x),
+        "y": Double(bounds.origin.y),
+        "width": Double(bounds.width),
+        "height": Double(bounds.height),
+        "scale": Double(screen?.backingScaleFactor ?? 1.0),
+        "isPrimary": id == main,
+        "name": screen?.localizedName ?? "Display \(id)",
+      ]
+    }
+  }
+
+  // MARK: - Capture
+
+  private func captureDisplay(_ id: CGDirectDisplayID, result: @escaping FlutterResult) {
+    let scale = Double(screen(for: id)?.backingScaleFactor ?? 1.0)
+    if #available(macOS 14.0, *) {
+      SCShareableContent.getExcludingDesktopWindows(false, onScreenWindowsOnly: true) { [weak self] content, error in
+        guard let self = self else { return }
+        guard error == nil, let content = content,
+              let display = content.displays.first(where: { $0.displayID == id }) else {
+          self.captureLegacy(id, scale: scale, result: result)
+          return
+        }
+        let myPid = ProcessInfo.processInfo.processIdentifier
+        let ownApps = content.applications.filter { $0.processID == myPid }
+        let filter = SCContentFilter(display: display, excludingApplications: ownApps, exceptingWindows: [])
+        let config = SCStreamConfiguration()
+        config.width = Int(Double(display.width) * scale)
+        config.height = Int(Double(display.height) * scale)
+        config.showsCursor = false
+        config.captureResolution = .best
+        config.pixelFormat = kCVPixelFormatType_32BGRA
+        SCScreenshotManager.captureImage(contentFilter: filter, configuration: config) { image, error in
+          guard error == nil, let image = image else {
+            self.captureLegacy(id, scale: scale, result: result)
+            return
+          }
+          self.respond(image: image, scale: scale, result: result)
+        }
+      }
+    } else {
+      captureLegacy(id, scale: scale, result: result)
+    }
+  }
+
+  private func captureLegacy(_ id: CGDirectDisplayID, scale: Double, result: @escaping FlutterResult) {
+    guard let image = CGDisplayCreateImage(id) else {
+      DispatchQueue.main.async {
+        result(FlutterError(code: "capture_failed", message: "CGDisplayCreateImage returned nil", details: nil))
+      }
+      return
+    }
+    respond(image: image, scale: scale, result: result)
+  }
+
+  private func respond(image: CGImage, scale: Double, result: @escaping FlutterResult) {
+    // Convert off the main thread; the buffer may be > 50 MB on large displays.
+    DispatchQueue.global(qos: .userInitiated).async {
+      let width = image.width
+      let height = image.height
+      let bytesPerRow = width * 4
+      var data = Data(count: bytesPerRow * height)
+      let ok = data.withUnsafeMutableBytes { (ptr: UnsafeMutableRawBufferPointer) -> Bool in
+        guard let base = ptr.baseAddress,
+              let ctx = CGContext(
+                data: base,
+                width: width,
+                height: height,
+                bitsPerComponent: 8,
+                bytesPerRow: bytesPerRow,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue
+              ) else { return false }
+        ctx.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        return true
+      }
+      DispatchQueue.main.async {
+        if ok {
+          result([
+            "width": width,
+            "height": height,
+            "scale": scale,
+            "format": "rgba",
+            "bytes": FlutterStandardTypedData(bytes: data),
+          ])
+        } else {
+          result(FlutterError(code: "capture_failed", message: "Could not convert image", details: nil))
+        }
+      }
+    }
+  }
+
+  // MARK: - Windows
+
+  private func listWindows() -> [[String: Any]] {
+    let options: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
+    guard let info = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]] else {
+      return []
+    }
+    let myPid = ProcessInfo.processInfo.processIdentifier
+    var out: [[String: Any]] = []
+    for item in info {
+      guard let layer = item[kCGWindowLayer as String] as? Int, layer == 0 else { continue }
+      guard let pid = item[kCGWindowOwnerPID as String] as? Int32, pid != myPid else { continue }
+      guard let boundsDict = item[kCGWindowBounds as String] as? NSDictionary,
+            let bounds = CGRect(dictionaryRepresentation: boundsDict) else { continue }
+      if bounds.width < 24 || bounds.height < 24 { continue }
+      if let alpha = item[kCGWindowAlpha as String] as? Double, alpha <= 0.01 { continue }
+      let owner = item[kCGWindowOwnerName as String] as? String ?? ""
+      let title = item[kCGWindowName as String] as? String ?? ""
+      let number = item[kCGWindowNumber as String] as? Int ?? 0
+      out.append([
+        "id": number,
+        "title": title,
+        "app": owner,
+        "x": Double(bounds.origin.x),
+        "y": Double(bounds.origin.y),
+        "width": Double(bounds.width),
+        "height": Double(bounds.height),
+      ])
+    }
+    return out
+  }
+
+  // MARK: - Overlay window
+
+  private func enterOverlay(displayId: CGDirectDisplayID) {
+    guard let screen = screen(for: displayId) ?? NSScreen.main else { return }
+    if !isOverlay {
+      savedStyleMask = window.styleMask
+      savedCollectionBehavior = window.collectionBehavior
+      savedLevel = window.level
+      savedHasShadow = window.hasShadow
+      isOverlay = true
+    }
+    overlayScreen = screen
+    window.styleMask = [.borderless, .fullSizeContentView]
+    window.level = NSWindow.Level(rawValue: NSWindow.Level.screenSaver.rawValue + 1)
+    window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
+    window.hasShadow = false
+    window.isOpaque = true
+    window.backgroundColor = .black
+    window.setFrame(screen.frame, display: true)
+    window.setIsVisible(true)
+    NSApp.activate(ignoringOtherApps: true)
+    window.makeKeyAndOrderFront(nil)
+  }
+
+  private func exitOverlay(width: Double, height: Double) {
+    guard isOverlay else { return }
+    isOverlay = false
+    window.styleMask = savedStyleMask
+    window.level = .normal
+    window.collectionBehavior = savedCollectionBehavior
+    window.hasShadow = savedHasShadow
+    window.isOpaque = false
+    let screen = overlayScreen ?? NSScreen.main
+    let visible = screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
+    let w = min(width, visible.width - 40)
+    let h = min(height, visible.height - 40)
+    let frame = NSRect(x: visible.midX - w / 2, y: visible.midY - h / 2, width: w, height: h)
+    window.setFrame(frame, display: true)
+    (window as? MainFlutterWindow)?.layoutTrafficLights()
+  }
+
+  // MARK: - Notifications
+
+  /// Posts a system notification. Asks for permission the first time; replies
+  /// `true` only when the notification was actually handed to the system
+  /// (the user allowed notifications), so Dart can fall back to an in-app
+  /// toast otherwise.
+  private func notify(title: String, body: String, result: @escaping FlutterResult) {
+    let center = UNUserNotificationCenter.current()
+    let reply: (Bool) -> Void = { ok in DispatchQueue.main.async { result(ok) } }
+    let deliver = {
+      let content = UNMutableNotificationContent()
+      content.title = title
+      content.body = body
+      let request = UNNotificationRequest(
+        identifier: UUID().uuidString, content: content, trigger: nil)
+      center.add(request) { error in reply(error == nil) }
+    }
+    center.getNotificationSettings { settings in
+      switch settings.authorizationStatus {
+      case .authorized, .provisional:
+        deliver()
+      case .notDetermined:
+        center.requestAuthorization(options: [.alert]) { granted, _ in
+          if granted { deliver() } else { reply(false) }
+        }
+      default:
+        reply(false)
+      }
+    }
+  }
+
+  // MARK: - Text recognition
+
+  private func recognizeText(png: Data, result: @escaping FlutterResult) {
+    guard let source = CGImageSourceCreateWithData(png as CFData, nil),
+          let cgImage = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
+      result(nil)
+      return
+    }
+    let request = VNRecognizeTextRequest { request, error in
+      guard error == nil,
+            let observations = request.results as? [VNRecognizedTextObservation] else {
+        DispatchQueue.main.async { result(nil) }
+        return
+      }
+      let text = observations
+        .compactMap { $0.topCandidates(1).first?.string }
+        .joined(separator: "\n")
+      DispatchQueue.main.async { result(text.isEmpty ? nil : text) }
+    }
+    request.recognitionLevel = .accurate
+    request.usesLanguageCorrection = true
+    // No `recognitionLanguages` override: Vision picks languages from the
+    // user's preferred-languages list, which covers pt/en without us having
+    // to plumb the app's own language setting through.
+    DispatchQueue.global(qos: .userInitiated).async {
+      let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+      do {
+        try handler.perform([request])
+      } catch {
+        DispatchQueue.main.async { result(nil) }
+      }
+    }
+  }
+
+  // MARK: - Clipboard
+
+  private func setClipboardImage(png: Data) -> Bool {
+    guard let image = NSImage(data: png) else { return false }
+    let pasteboard = NSPasteboard.general
+    pasteboard.clearContents()
+    return pasteboard.writeObjects([image])
+  }
+}
+
+// Without a delegate macOS suppresses notifications while the app is the
+// active one — and it is, whenever the editor or Home is on screen.
+extension ShoShotNative: UNUserNotificationCenterDelegate {
+  func userNotificationCenter(
+    _ center: UNUserNotificationCenter,
+    willPresent notification: UNNotification,
+    withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+  ) {
+    completionHandler([.banner, .list])
+  }
+}
