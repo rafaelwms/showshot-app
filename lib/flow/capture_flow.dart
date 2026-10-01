@@ -3,7 +3,8 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show Clipboard, ClipboardData;
+import 'package:flutter/services.dart'
+    show Clipboard, ClipboardData, PlatformException;
 import 'package:window_manager/window_manager.dart';
 
 import '../models/app_settings.dart';
@@ -171,7 +172,9 @@ class CaptureFlow extends ChangeNotifier with WindowListener {
       final session = await capture.captureUnderCursor(mode);
       _session = session;
 
-      if (mode == CaptureMode.fullScreen) {
+      // Nothing left to pick: the whole display, or a window the user
+      // already picked in the desktop's own screenshot UI (Wayland).
+      if (mode == CaptureMode.fullScreen || session.pickedByDesktop) {
         await _openEditor(session.image.clone(), session);
         return;
       }
@@ -182,9 +185,15 @@ class CaptureFlow extends ChangeNotifier with WindowListener {
       await native.enterOverlay(session.display.id);
       await windowManager.focus();
     } catch (error, stack) {
-      debugPrint('Capture failed: $error\n$stack');
       _session?.dispose();
       _session = null;
+      if (error is PlatformException && error.code == 'cancelled') {
+        // The user backed out of the desktop's screenshot UI: not a failure.
+        _setStage(FlowStage.idle);
+        if (_returnToHome) await showHome();
+        return;
+      }
+      debugPrint('Capture failed: $error\n$stack');
       // Access revoked since we last checked (e.g. in GNOME Settings)?
       final info = await native.platformInfo();
       _permissionMissing =
@@ -451,7 +460,6 @@ class CaptureFlow extends ChangeNotifier with WindowListener {
     }
     if (await windowManager.isMaximized()) await windowManager.unmaximize();
   }
-
 
   Completer<void>? _leftFullScreen;
 

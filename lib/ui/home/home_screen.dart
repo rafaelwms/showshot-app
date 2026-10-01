@@ -226,17 +226,17 @@ class _CaptureColumn extends StatelessWidget {
                 padding: const EdgeInsets.only(top: 10),
                 child: Row(
                   children: [
-                    const Icon(
-                      Icons.warning_amber_rounded,
+                    Icon(
+                      Icons.info_outline_rounded,
                       size: 15,
-                      color: AppColors.warning,
+                      color: context.palette.textFaint,
                     ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         strings.waylandWarning,
                         style: TextStyle(
-                          color: context.palette.textMuted,
+                          color: context.palette.textFaint,
                           fontSize: 12,
                         ),
                       ),

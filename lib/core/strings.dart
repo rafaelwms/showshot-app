@@ -438,7 +438,7 @@ class _Pt extends Strings {
   String get platformNotes => 'Notas da plataforma';
   @override
   String get waylandWarning =>
-      'Sessão Wayland detectada: a captura usa ferramentas do sistema e a detecção de janelas fica indisponível.';
+      'Sessão Wayland: no modo Janela, a janela é escolhida na ferramenta de captura do sistema.';
 }
 
 class _En extends Strings {
@@ -719,5 +719,5 @@ class _En extends Strings {
   String get platformNotes => 'Platform notes';
   @override
   String get waylandWarning =>
-      'Wayland session detected: capture uses system tools and window detection is unavailable.';
+      "Wayland session: in Window mode, you pick the window in the system's screenshot tool.";
 }

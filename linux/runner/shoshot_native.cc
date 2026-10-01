@@ -623,6 +623,8 @@ struct PortalScreenshotRequest {
   guint signal_id = 0;
   // Only report success/failure (a permission probe), don't send the PNG.
   bool probe = false;
+  // The desktop showed its own screenshot UI.
+  bool interactive = false;
 };
 
 void OnScreenshotResponse(GDBusConnection*, const gchar*, const gchar*,
@@ -675,7 +677,9 @@ void OnScreenshotResponse(GDBusConnection*, const gchar*, const gchar*,
         remove(path);
         g_free(path);
       }
-    } else if (response_code == 1) {
+    } else if (response_code == 1 || req->interactive) {
+      // GNOME answers a dismissed screenshot UI with 2 ("other"), not 1
+      // ("cancelled") as the spec says; from the user's side it's the same.
       response = FL_METHOD_RESPONSE(
           fl_method_error_response_new("cancelled", "capture cancelled", nullptr));
     } else {
@@ -725,6 +729,7 @@ void StartScreenshotPortal(NativeState* state, FlMethodCall* call,
   req->call = FL_METHOD_CALL(g_object_ref(call));
   req->bus = state->session_bus;
   req->probe = probe;
+  req->interactive = interactive;
   req->signal_id = g_dbus_connection_signal_subscribe(
       state->session_bus, kPortalBus, "org.freedesktop.portal.Request",
       "Response", expected_path, nullptr, G_DBUS_SIGNAL_FLAGS_NONE,

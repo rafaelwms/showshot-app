@@ -12,6 +12,8 @@ class CaptureSession {
     required this.display,
     required this.image,
     required this.windows,
+    this.pickedByDesktop = false,
+    this._pixelRatio,
     DateTime? capturedAt,
   }) : capturedAt = capturedAt ?? DateTime.now();
 
@@ -26,8 +28,16 @@ class CaptureSession {
 
   final DateTime capturedAt;
 
+  /// [image] is already the final picture, chosen in the desktop's own
+  /// screenshot UI (Linux/Wayland window mode) — not a whole display to pick
+  /// from in the overlay.
+  final bool pickedByDesktop;
+
+  final double? _pixelRatio;
+
   /// Ratio between image pixels and display-local logical pixels.
-  double get pixelRatio => image.width / display.logicalSize.width;
+  double get pixelRatio =>
+      _pixelRatio ?? image.width / display.logicalSize.width;
 
   ui.Rect get logicalRect => ui.Offset.zero & display.logicalSize;
 
