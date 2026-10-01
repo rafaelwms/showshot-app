@@ -244,6 +244,7 @@ class DebugCommandServer {
               'ask' => s.copyWith(askWhereToSave: value),
               'copyAfterSave' => s.copyWith(copyAfterSave: value),
               'magnifier' => s.copyWith(showMagnifier: value),
+              'taskbar' => s.copyWith(showTaskbarIcon: value),
               'jpg' => s.copyWith(
                 saveFormat: value ? ImageFormat.jpg : ImageFormat.png,
               ),
