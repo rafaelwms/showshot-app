@@ -795,6 +795,50 @@ void ForgetScreenshotPermission(NativeState* state) {
 }
 
 // ---------------------------------------------------------------------------
+// Notifications (org.freedesktop.Notifications over the session bus)
+// ---------------------------------------------------------------------------
+
+void OnNotifyDone(GObject* source, GAsyncResult* res, gpointer user_data) {
+  FlMethodCall* call = FL_METHOD_CALL(user_data);
+  GError* error = nullptr;
+  GVariant* reply =
+      g_dbus_connection_call_finish(G_DBUS_CONNECTION(source), res, &error);
+  bool ok = reply != nullptr;
+  if (reply != nullptr) g_variant_unref(reply);
+  if (error != nullptr) g_error_free(error);
+  g_autoptr(FlValue) value = fl_value_new_bool(ok);
+  g_autoptr(FlMethodResponse) response =
+      FL_METHOD_RESPONSE(fl_method_success_response_new(value));
+  fl_method_call_respond(call, response, nullptr);
+  g_object_unref(call);
+}
+
+// Sends the notification and answers `call` (true when a notification daemon
+// accepted it) from the D-Bus reply, so Dart can fall back to an in-app toast.
+void ShowNotification(NativeState* state, FlMethodCall* call,
+                      const std::string& title, const std::string& body) {
+  if (state->session_bus == nullptr) {
+    g_autoptr(FlValue) value = fl_value_new_bool(false);
+    g_autoptr(FlMethodResponse) response =
+        FL_METHOD_RESPONSE(fl_method_success_response_new(value));
+    fl_method_call_respond(call, response, nullptr);
+    return;
+  }
+  GVariantBuilder actions;
+  g_variant_builder_init(&actions, G_VARIANT_TYPE("as"));
+  GVariantBuilder hints;
+  g_variant_builder_init(&hints, G_VARIANT_TYPE("a{sv}"));
+  g_dbus_connection_call(
+      state->session_bus, "org.freedesktop.Notifications",
+      "/org/freedesktop/Notifications", "org.freedesktop.Notifications",
+      "Notify",
+      g_variant_new("(susssasa{sv}i)", "Show Shot", 0u, APPLICATION_ID,
+                    title.c_str(), body.c_str(), &actions, &hints, 5000),
+      G_VARIANT_TYPE("(u)"), G_DBUS_CALL_FLAGS_NONE, 2000, nullptr,
+      OnNotifyDone, g_object_ref(call));
+}
+
+// ---------------------------------------------------------------------------
 // Method dispatch
 // ---------------------------------------------------------------------------
 
@@ -914,6 +958,10 @@ void MethodCallHandler(FlMethodChannel*, FlMethodCall* call,
       g_free(dir);
     }
     response = FL_METHOD_RESPONSE(fl_method_success_response_new(nullptr));
+  } else if (strcmp(method, "notify") == 0) {
+    ShowNotification(state, call, ArgString(args, "title"),
+                     ArgString(args, "body"));
+    return;  // answered from OnNotifyDone
   } else if (strcmp(method, "getSystemAccent") == 0) {
     g_autoptr(FlValue) v = fl_value_new_int(state->last_accent_argb);
     response = FL_METHOD_RESPONSE(fl_method_success_response_new(v));

@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:tray_manager/tray_manager.dart' as tray;
 
 import '../core/strings.dart';
+import '../models/app_settings.dart';
 import '../models/capture_mode.dart';
 import 'hotkey_service.dart';
 import 'settings_service.dart';
@@ -56,22 +57,40 @@ class TrayService {
         };
       }
       icon.setTooltip('Show Shot');
-      // macOS: left click opens the menu. Windows: left click opens the app,
-      // right click opens the menu. Linux panels handle clicks themselves.
-      icon.setContextMenuTrigger(
-        Platform.isWindows
-            ? tray.ContextMenuTrigger.rightClicked
-            : tray.ContextMenuTrigger.clicked,
-      );
+      // Left click runs the action chosen in Settings
+      // (`AppSettings.trayLeftClick`, area capture by default); right click
+      // opens the menu on macOS and Windows alike. Linux panels handle
+      // clicks (and show the menu) themselves.
+      icon.setContextMenuTrigger(tray.ContextMenuTrigger.rightClicked);
       icon.addListener((event) {
-        if (event is tray.TrayIconClickedEvent && Platform.isWindows) onOpen();
-        if (event is tray.TrayIconDoubleClickedEvent) onOpen();
+        if (event is tray.TrayIconClickedEvent) _onLeftClick(icon);
       });
       rebuildMenu();
       icon.setVisible(true);
       settings.addListener(rebuildMenu);
     } catch (error, stack) {
       debugPrint('Tray init failed: $error\n$stack');
+    }
+  }
+
+  /// Debug automation: what a left click on the icon would do.
+  void debugLeftClick() {
+    final icon = _icon;
+    if (icon != null) _onLeftClick(icon);
+  }
+
+  void _onLeftClick(tray.TrayIcon icon) {
+    final action = settings.settings.trayLeftClick;
+    switch (action) {
+      case TrayAction.openApp:
+        onOpen();
+      case TrayAction.menu:
+        icon.openContextMenu();
+      case TrayAction.area:
+      case TrayAction.window:
+      case TrayAction.fullScreen:
+      case TrayAction.text:
+        onCapture(action.mode!);
     }
   }
 

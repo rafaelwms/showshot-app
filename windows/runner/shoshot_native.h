@@ -7,6 +7,7 @@
 #include <windows.h>
 
 #include <memory>
+#include <string>
 
 // Native bridge for ShoShot (Windows).
 //
@@ -37,6 +38,7 @@ class ShoShotNative {
                          const std::vector<uint8_t>& rgba, int width,
                          int height);
   int64_t CurrentAccentArgb();
+  bool ShowNotification(const std::string& title, const std::string& body);
 
  public:
   // Called by FlutterWindow::MessageHandler on WM_SETTINGCHANGE /

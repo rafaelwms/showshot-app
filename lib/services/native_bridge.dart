@@ -56,6 +56,15 @@ class NativePlatformInfo {
   );
 }
 
+/// How the OS started the process, for what the command line can't say:
+/// macOS login items carry no arguments.
+class NativeLaunchInfo {
+  const NativeLaunchInfo({this.atLogin = false});
+
+  /// True when the OS launched the app as a login item.
+  final bool atLogin;
+}
+
 /// Thin typed wrapper around the `shoshot/native` method channel implemented
 /// in each platform runner.
 class NativeBridge {
@@ -224,6 +233,70 @@ class NativeBridge {
 
   Future<void> revealFile(String path) =>
       _channel.invokeMethod('revealFile', {'path': path});
+
+  /// macOS (App Sandbox): a security-scoped bookmark for a folder the user
+  /// just picked, so it stays writable across launches. Null elsewhere or on
+  /// failure.
+  Future<Uint8List?> bookmarkDirectory(String path) async {
+    try {
+      return await _channel.invokeMethod<Uint8List>('bookmarkDirectory', {
+        'path': path,
+      });
+    } on MissingPluginException {
+      return null;
+    }
+  }
+
+  /// Resolves a bookmark from [bookmarkDirectory] and starts accessing that
+  /// folder for the rest of this launch. Returns the folder path plus a
+  /// refreshed bookmark when the stored one went stale, or null if the folder
+  /// can't be reached anymore.
+  Future<({String path, Uint8List? refreshed})?> resolveDirectoryBookmark(
+    Uint8List bookmark,
+  ) async {
+    try {
+      final raw = await _channel.invokeMapMethod<String, dynamic>(
+        'resolveDirectoryBookmark',
+        {'bookmark': bookmark},
+      );
+      if (raw == null) return null;
+      return (
+        path: raw['path'] as String,
+        refreshed: raw['bookmark'] as Uint8List?,
+      );
+    } on MissingPluginException {
+      return null;
+    }
+  }
+
+  /// Posts an OS notification. True only if the system accepted it — false
+  /// when notifications aren't allowed/available, or the platform doesn't
+  /// implement it. Never waits on a permission prompt for more than a few
+  /// seconds, so a flow can't hang on it.
+  Future<bool> notify({required String title, required String body}) async {
+    try {
+      final ok = await _channel
+          .invokeMethod<bool>('notify', {'title': title, 'body': body})
+          .timeout(const Duration(seconds: 4), onTimeout: () => false);
+      return ok ?? false;
+    } on MissingPluginException {
+      return false;
+    } on PlatformException catch (error) {
+      debugPrint('notify failed: ${error.message}');
+      return false;
+    }
+  }
+
+  /// Launch details only the native side can see (see [NativeLaunchInfo]).
+  /// Platforms that don't implement it report a plain, non-login launch.
+  Future<NativeLaunchInfo> launchInfo() async {
+    try {
+      final map = await _channel.invokeMapMethod<String, Object?>('launchInfo');
+      return NativeLaunchInfo(atLogin: map?['atLogin'] == true);
+    } on MissingPluginException {
+      return const NativeLaunchInfo();
+    }
+  }
 
   /// Reads the OS accent color once. Returns null where unsupported (the
   /// caller should keep [SystemAccent.fallback]).

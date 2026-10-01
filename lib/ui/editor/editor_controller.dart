@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme.dart';
 import '../../models/annotation.dart';
 
-enum _DragKind { draw, move, handle }
+enum _DragKind { draw, move, handle, rotate }
 
 /// Editor state: annotations, tool, style, selection, undo/redo and zoom.
 ///
@@ -62,6 +62,8 @@ class EditorController extends ChangeNotifier {
   Offset? _dragStart;
   Annotation? _dragOriginal;
   int _dragHandle = -1;
+  Offset? _dragPivot;
+  double _dragAngle0 = 0;
   List<Annotation>? _preDragSnapshot;
 
   // ---------------------------------------------------------------------------
@@ -291,6 +293,16 @@ class EditorController extends ChangeNotifier {
           return;
         }
       }
+      final rotate = current.rotationHandle(rotateHandleDistance);
+      if ((rotate - p).distance <= tolerance * 1.5) {
+        _drag = _DragKind.rotate;
+        _dragStart = p;
+        _dragOriginal = current;
+        _dragPivot = current.pivot;
+        _dragAngle0 = (p - current.pivot).direction;
+        _preDragSnapshot = List.of(_annotations);
+        return;
+      }
     }
     // Topmost annotation wins.
     for (final a in _annotations.reversed) {
@@ -333,9 +345,31 @@ class EditorController extends ChangeNotifier {
           final anchor = original.isLinear
               ? (_dragHandle == 0 ? original.end : original.start)
               : original.handles[(_dragHandle + 2) % 4];
-          target = _constrain(anchor, p, original.isLinear);
+          target = _constrain(
+            anchor,
+            p,
+            original.isLinear,
+            angle: original.rotation,
+          );
         }
-        _replace(original.withHandle(_dragHandle, target));
+        if (shift && original is StrokeAnnotation) {
+          target = original.proportionalHandleTarget(_dragHandle, p);
+        }
+        final resized = original.withHandle(_dragHandle, target);
+        _replace(resized);
+        // Resizing text changes its font size: keep the properties bar in
+        // step, or its slider would show (and re-apply) the old size.
+        if (resized is TextAnnotation) _style = resized.style;
+      case _DragKind.rotate:
+        final original = _dragOriginal!;
+        var delta = (p - _dragPivot!).direction - _dragAngle0;
+        if (shift) {
+          // Snap the *resulting* angle to 15° steps.
+          const step = math.pi / 12;
+          final target = original.rotation + delta;
+          delta = (target / step).round() * step - original.rotation;
+        }
+        _replace(original.rotatedBy(delta));
     }
     notifyListeners();
   }
@@ -357,6 +391,7 @@ class EditorController extends ChangeNotifier {
         }
       case _DragKind.move:
       case _DragKind.handle:
+      case _DragKind.rotate:
         final original = _dragOriginal;
         final now = selected;
         if (original != null &&
@@ -370,21 +405,25 @@ class EditorController extends ChangeNotifier {
     _dragStart = null;
     _dragOriginal = null;
     _dragHandle = -1;
+    _dragPivot = null;
     _preDragSnapshot = null;
     notifyListeners();
   }
 
-  /// Shift constraint: 45° increments for lines, squares for boxes.
-  Offset _constrain(Offset anchor, Offset p, bool linear) {
+  /// Shift constraint: 45° increments for lines, squares for boxes. A box
+  /// rotated by [angle] is squared in its own axes, not the screen's.
+  Offset _constrain(Offset anchor, Offset p, bool linear, {double angle = 0}) {
     final d = p - anchor;
     if (linear) {
-      final angle = math.atan2(d.dy, d.dx);
-      final snapped = (angle / (math.pi / 4)).round() * (math.pi / 4);
+      final direction = math.atan2(d.dy, d.dx);
+      final snapped = (direction / (math.pi / 4)).round() * (math.pi / 4);
       final length = d.distance;
       return anchor + Offset(math.cos(snapped), math.sin(snapped)) * length;
     }
-    final side = math.max(d.dx.abs(), d.dy.abs());
-    return anchor + Offset(side * d.dx.sign, side * d.dy.sign);
+    final local = rotatePoint(p, anchor, -angle) - anchor;
+    final side = math.max(local.dx.abs(), local.dy.abs());
+    final squared = Offset(side * local.dx.sign, side * local.dy.sign);
+    return rotatePoint(anchor + squared, anchor, angle);
   }
 
   /// Handles under [p] for the selected annotation (used for cursor feedback).
@@ -393,6 +432,18 @@ class EditorController extends ChangeNotifier {
     if (current == null) return false;
     final tolerance = _tolerance() * 1.5;
     return current.handles.any((h) => (h - p).distance <= tolerance);
+  }
+
+  /// Distance (image pixels) from the selection's top edge to its rotation
+  /// handle: a fixed on-screen distance, whatever the zoom.
+  double get rotateHandleDistance =>
+      rotationHandleScreenDistance / math.max(zoom, 0.01);
+
+  bool isOverRotationHandle(Offset p) {
+    final current = selected;
+    if (current == null) return false;
+    return (current.rotationHandle(rotateHandleDistance) - p).distance <=
+        _tolerance() * 1.5;
   }
 
   bool isOverAnnotation(Offset p) {
@@ -471,6 +522,12 @@ class EditorController extends ChangeNotifier {
   // Zoom
   // ---------------------------------------------------------------------------
 
+  double? _fitScale;
+
+  /// True while the view is still at the scale [fitTo] last chose — i.e. the
+  /// user hasn't zoomed since — so a window resize should re-fit it.
+  bool get isFitted => _fitScale != null && (zoom - _fitScale!).abs() < 1e-3;
+
   void fitTo(Size viewport, {double padding = 48}) {
     if (viewport.isEmpty) return;
     final scale = math
@@ -480,6 +537,7 @@ class EditorController extends ChangeNotifier {
         )
         .clamp(0.02, 1.0);
     _setZoom(scale, viewport);
+    _fitScale = zoom;
   }
 
   void actualSize(Size viewport) => _setZoom(1.0, viewport);
