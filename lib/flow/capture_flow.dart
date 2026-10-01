@@ -203,6 +203,33 @@ class CaptureFlow extends ChangeNotifier with WindowListener {
     if (session == null || _stage != FlowStage.overlay) return;
     _busy = true;
     try {
+      final rect = result.rect ?? session.logicalRect;
+      final saveDirect =
+          result.action == OverlayAction.save &&
+          !settings.settings.askWhereToSave;
+
+      // Clipboard writes happen *before* hiding the overlay: Wayland only
+      // accepts them from the focused window, and drops them silently
+      // otherwise (harmless ordering everywhere else).
+      ui.Image? image;
+      FlowMessage? copyResult;
+      switch (result.action) {
+        case OverlayAction.copy:
+          image = await session.crop(rect);
+          copyResult = await export.copyToClipboard(image)
+              ? const FlowMessage(FlowMessageKind.copied)
+              : null;
+        case OverlayAction.extractText:
+          copyResult = await _extractText(await session.crop(rect));
+        case OverlayAction.save when saveDirect:
+          image = await session.crop(rect);
+          if (settings.settings.copyAfterSave) {
+            await export.copyToClipboard(image);
+          }
+        case OverlayAction.save || OverlayAction.edit || OverlayAction.cancel:
+          break;
+      }
+
       // Hide before restoring the window style so the user never sees the
       // overlay collapse into a regular window.
       await windowManager.hide();
@@ -210,46 +237,33 @@ class CaptureFlow extends ChangeNotifier with WindowListener {
       final size = _editorWindowSize(session.image, session);
       await native.exitOverlay(width: size.width, height: size.height);
 
-      final rect = result.rect ?? session.logicalRect;
       switch (result.action) {
         case OverlayAction.cancel:
           _disposeSession();
           _setStage(FlowStage.idle);
           await _finish();
         case OverlayAction.edit:
-          final image = await session.crop(rect);
-          await _openEditor(image, session);
-        case OverlayAction.copy:
-          final image = await session.crop(rect);
-          final ok = await export.copyToClipboard(image);
-          image.dispose();
+          await _openEditor(await session.crop(rect), session);
+        case OverlayAction.copy || OverlayAction.extractText:
+          image?.dispose();
           _disposeSession();
-          if (ok) {
-            await _report(const FlowMessage(FlowMessageKind.copied));
+          if (copyResult != null) {
+            await _report(copyResult);
           } else {
             _lastMessage = null;
           }
           _setStage(FlowStage.idle);
           await _finish();
-        case OverlayAction.extractText:
-          final image = await session.crop(rect);
-          await _extractText(image);
+        case OverlayAction.save when saveDirect:
+          await _saveDirect(image!, copied: true);
+          image.dispose();
           _disposeSession();
           _setStage(FlowStage.idle);
           await _finish();
         case OverlayAction.save:
-          final image = await session.crop(rect);
-          if (settings.settings.askWhereToSave) {
-            // The dialog needs a visible parent window: open the editor and
-            // let it trigger the save panel.
-            await _openEditor(image, session, autoSave: true);
-          } else {
-            await _saveDirect(image);
-            image.dispose();
-            _disposeSession();
-            _setStage(FlowStage.idle);
-            await _finish();
-          }
+          // The dialog needs a visible parent window: open the editor and
+          // let it trigger the save panel.
+          await _openEditor(await session.crop(rect), session, autoSave: true);
       }
     } catch (error, stack) {
       debugPrint('Overlay completion failed: $error\n$stack');
@@ -263,29 +277,30 @@ class CaptureFlow extends ChangeNotifier with WindowListener {
     }
   }
 
-  Future<void> _saveDirect(ui.Image image) async {
+  /// [copied]: the caller already handled "copy after save" (it has to
+  /// happen while a window is focused, see [completeOverlay]).
+  Future<void> _saveDirect(ui.Image image, {bool copied = false}) async {
     final path = await export.save(image, settings.settings);
     if (path == null) {
       await _report(const FlowMessage(FlowMessageKind.saveFailed));
       return;
     }
     await settings.addRecentFile(path);
-    if (settings.settings.copyAfterSave) await export.copyToClipboard(image);
+    if (!copied && settings.settings.copyAfterSave) {
+      await export.copyToClipboard(image);
+    }
     await _report(FlowMessage(FlowMessageKind.saved, path: path));
   }
 
   /// Recognizes text in [image] and copies it to the clipboard. Disposes
-  /// [image]; sets [lastMessage] to report the outcome either way.
-  Future<void> _extractText(ui.Image image) async {
+  /// [image]; returns the outcome for the caller to report.
+  Future<FlowMessage> _extractText(ui.Image image) async {
     final png = await ExportService.encodePng(image);
     image.dispose();
     final text = await ocr.recognize(png);
-    if (text == null) {
-      await _report(const FlowMessage(FlowMessageKind.noTextFound));
-      return;
-    }
+    if (text == null) return const FlowMessage(FlowMessageKind.noTextFound);
     await Clipboard.setData(ClipboardData(text: text));
-    await _report(const FlowMessage(FlowMessageKind.textCopied));
+    return const FlowMessage(FlowMessageKind.textCopied);
   }
 
   /// Called by the editor once the user copied/saved/discarded.
