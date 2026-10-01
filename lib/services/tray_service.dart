@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui' show Brightness, PlatformDispatcher, Size;
 
@@ -65,10 +66,19 @@ class TrayService {
       // Left click runs the action chosen in Settings
       // (`AppSettings.trayLeftClick`, area capture by default); right click
       // opens the menu on macOS and Windows alike. Linux panels handle
-      // clicks (and show the menu) themselves.
-      icon.setContextMenuTrigger(tray.ContextMenuTrigger.rightClicked);
+      // clicks (and show the menu) themselves: the StatusNotifierItem gets no
+      // click events through to us (nativeapi's Activate/ContextMenu are
+      // no-ops), and it only publishes the menu with the `clicked` trigger —
+      // with `rightClicked` the icon had no menu at all.
+      icon.setContextMenuTrigger(
+        Platform.isLinux
+            ? tray.ContextMenuTrigger.clicked
+            : tray.ContextMenuTrigger.rightClicked,
+      );
       icon.addListener((event) {
-        if (event is tray.TrayIconClickedEvent) _onLeftClick(icon);
+        if (event is tray.TrayIconClickedEvent) {
+          _runOutsideCallback(() => _onLeftClick(icon));
+        }
       });
       rebuildMenu();
       icon.setVisible(true);
@@ -100,6 +110,14 @@ class TrayService {
     }
   }
 
+  /// Tray events arrive through a synchronous native (FFI) callback. On
+  /// Linux, async work started right inside it stalls at its first `await`:
+  /// the continuation sits in the microtask queue until some *other* event
+  /// wakes the isolate — a tray "Area" click looked dead until the user
+  /// happened to open the window. Running the handler as a regular event
+  /// (a zero timer) gets its microtasks drained normally.
+  void _runOutsideCallback(VoidCallback action) => Timer.run(action);
+
   void _applyTrayIconForBrightness(tray.TrayIcon icon) {
     final dark =
         PlatformDispatcher.instance.platformBrightness == Brightness.dark;
@@ -127,7 +145,7 @@ class TrayService {
         tray.MenuItemType.normal,
       );
       menuItem?.addListener((event) {
-        if (event is tray.MenuItemClickedEvent) onClick();
+        if (event is tray.MenuItemClickedEvent) _runOutsideCallback(onClick);
       });
       return menuItem;
     }
