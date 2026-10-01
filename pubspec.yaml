@@ -38,7 +38,7 @@ msix_config:
   publisher_display_name: Rafael WMS
   identity_name: RafaelWMS.ShowShot
   publisher: CN=AF042F64-62A1-4E4C-AE05-051096B63CC2
-  msix_version: 1.0.0.0
+  msix_version: 1.2.0.0
   logo_path: artwork/Icon Light.png
   languages: en-us, pt-br
   capabilities: runFullTrust
