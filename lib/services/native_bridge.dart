@@ -31,6 +31,25 @@ class RawCapture {
   }
 }
 
+/// A shortcut as the desktop actually bound it (Linux/Wayland portal).
+class BoundShortcut {
+  const BoundShortcut({required this.id, required this.trigger});
+
+  final String id;
+
+  /// Human-readable, from the desktop (e.g. "Ctrl+Shift+1"); may be empty
+  /// when the user left the shortcut unassigned.
+  final String trigger;
+
+  static List<BoundShortcut> listFrom(List<Object?> raw) => [
+    for (final item in raw.whereType<Map<Object?, Object?>>())
+      BoundShortcut(
+        id: item['id'] as String? ?? '',
+        trigger: item['trigger'] as String? ?? '',
+      ),
+  ];
+}
+
 /// Static facts about the native layer for the current platform.
 class NativePlatformInfo {
   const NativePlatformInfo({
@@ -39,6 +58,7 @@ class NativePlatformInfo {
     required this.supportsNativeCapture,
     required this.needsScreenPermission,
     required this.isWayland,
+    this.globalShortcutsPortal = false,
   });
 
   final bool globalIsPhysical;
@@ -46,6 +66,10 @@ class NativePlatformInfo {
   final bool supportsNativeCapture;
   final bool needsScreenPermission;
   final bool isWayland;
+
+  /// Linux/Wayland: global shortcuts go through the desktop portal (apps
+  /// can't grab keys themselves there).
+  final bool globalShortcutsPortal;
 
   static const fallback = NativePlatformInfo(
     globalIsPhysical: false,
@@ -83,12 +107,56 @@ class NativeBridge {
   /// color in System Settings while the app was running).
   void Function(SystemAccent accent)? onSystemAccentChanged;
 
+  /// Linux/Wayland: a shortcut bound through [bindGlobalShortcuts] fired.
+  void Function(String id)? onGlobalShortcutActivated;
+
+  /// Linux/Wayland: the user changed our shortcuts in the desktop's settings.
+  void Function(List<BoundShortcut> shortcuts)? onGlobalShortcutsChanged;
+
   Future<void> _handleIncoming(MethodCall call) async {
     if (call.method == 'systemAccentChanged') {
       final argb = (call.arguments as num?)?.toInt();
       if (argb != null) {
         onSystemAccentChanged?.call(SystemAccent(ui.Color(argb)));
       }
+    } else if (call.method == 'globalShortcutActivated') {
+      final id = call.arguments as String?;
+      if (id != null) onGlobalShortcutActivated?.call(id);
+    } else if (call.method == 'globalShortcutsChanged') {
+      onGlobalShortcutsChanged?.call(
+        BoundShortcut.listFrom(call.arguments as List<Object?>? ?? const []),
+      );
+    }
+  }
+
+  /// Linux/Wayland: asks the desktop (`org.freedesktop.portal.
+  /// GlobalShortcuts`) to bind [shortcuts]. GNOME shows its own confirmation
+  /// dialog the first time and may assign different keys than the preferred
+  /// ones — the result says what's actually bound. Throws [PlatformException]
+  /// (`cancelled` when the user declined).
+  Future<List<BoundShortcut>> bindGlobalShortcuts(
+    List<({String id, String description, String trigger})> shortcuts,
+  ) async {
+    final list = await _channel.invokeListMethod<Object?>(
+      'bindGlobalShortcuts',
+      {
+        'shortcuts': [
+          for (final s in shortcuts)
+            {'id': s.id, 'description': s.description, 'trigger': s.trigger},
+        ],
+      },
+    );
+    return BoundShortcut.listFrom(list ?? const []);
+  }
+
+  /// Opens the desktop's own UI to change the bound shortcuts. False when the
+  /// portal can't (older desktops) — fall back to the system settings.
+  Future<bool> configureGlobalShortcuts() async {
+    try {
+      return await _channel.invokeMethod<bool>('configureGlobalShortcuts') ??
+          false;
+    } on MissingPluginException {
+      return false;
     }
   }
 
@@ -104,6 +172,7 @@ class NativeBridge {
         supportsNativeCapture: map?['supportsNativeCapture'] == true,
         needsScreenPermission: map?['needsScreenPermission'] == true,
         isWayland: map?['wayland'] == true,
+        globalShortcutsPortal: map?['globalShortcutsPortal'] == true,
       );
     } on MissingPluginException {
       _info = NativePlatformInfo.fallback;

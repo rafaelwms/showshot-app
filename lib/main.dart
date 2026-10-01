@@ -39,9 +39,14 @@ Future<void> main(List<String> args) async {
     ocr: ocr,
     notifications: NotificationService(settings: settings, native: native),
   );
-  final hotkeys = HotkeyService(settings: settings, onTrigger: flow.start);
+  final hotkeys = HotkeyService(
+    settings: settings,
+    native: native,
+    onTrigger: flow.start,
+  );
   final tray = TrayService(
     settings: settings,
+    hotkeys: hotkeys,
     onCapture: flow.start,
     onOpen: flow.showHome,
     onSettings: flow.openSettings,

@@ -6,7 +6,6 @@ import '../../core/app_scope.dart';
 import '../../core/strings.dart';
 import '../../core/theme.dart';
 import '../../models/capture_mode.dart';
-import '../../services/hotkey_service.dart';
 import '../../services/notification_service.dart';
 import '../widgets/common.dart';
 
@@ -148,7 +147,6 @@ class _CaptureColumn extends StatelessWidget {
   Widget build(BuildContext context) {
     final services = AppScope.of(context);
     final strings = Strings.of(context);
-    final settings = services.settings.settings;
     final flow = services.flow;
 
     return Column(
@@ -190,7 +188,7 @@ class _CaptureColumn extends StatelessWidget {
         for (final mode in CaptureMode.values) ...[
           _CaptureCard(
             mode: mode,
-            hotKeyText: hotKeyLabel(settings.hotKeys[mode]),
+            hotKeyText: services.hotkeys.labelFor(mode),
             hotKeyFailed: services.hotkeys.failed.contains(mode),
             enabled: !flow.busy,
             onTap: () => flow.start(mode, fromHome: true),

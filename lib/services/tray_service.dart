@@ -14,6 +14,7 @@ import 'settings_service.dart';
 class TrayService {
   TrayService({
     required this.settings,
+    required this.hotkeys,
     required this.onCapture,
     required this.onOpen,
     required this.onSettings,
@@ -21,6 +22,10 @@ class TrayService {
   });
 
   final SettingsService settings;
+
+  /// Shortcut labels next to the capture items (on Wayland the desktop picks
+  /// the keys, so they can change without a settings change).
+  final HotkeyService hotkeys;
   final void Function(CaptureMode mode) onCapture;
   final VoidCallback onOpen;
   final VoidCallback onSettings;
@@ -68,6 +73,7 @@ class TrayService {
       rebuildMenu();
       icon.setVisible(true);
       settings.addListener(rebuildMenu);
+      hotkeys.addListener(rebuildMenu);
     } catch (error, stack) {
       debugPrint('Tray init failed: $error\n$stack');
     }
@@ -127,8 +133,9 @@ class TrayService {
     }
 
     String withHotKey(String label, CaptureMode mode) {
-      final hotKey = hotKeys[mode];
-      return hotKey == null ? label : '$label   ${hotKeyLabel(hotKey)}';
+      if (hotKeys[mode] == null) return label;
+      final shortcut = hotkeys.labelFor(mode);
+      return shortcut == '—' ? label : '$label   $shortcut';
     }
 
     for (final mode in CaptureMode.values) {
@@ -147,6 +154,7 @@ class TrayService {
 
   void dispose() {
     settings.removeListener(rebuildMenu);
+    hotkeys.removeListener(rebuildMenu);
     if (!Platform.isMacOS) {
       PlatformDispatcher.instance.onPlatformBrightnessChanged = null;
     }
