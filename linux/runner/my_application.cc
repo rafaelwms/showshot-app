@@ -14,6 +14,8 @@
 struct _MyApplication {
   GtkApplication parent_instance;
   char** dart_entrypoint_arguments;
+  // The single window, once created (see the uniqueness note below).
+  GtkWindow* window;
 };
 
 G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
@@ -79,6 +81,13 @@ static void first_frame_cb(MyApplication* self, FlView* view) {
 // Implements GApplication::activate.
 static void my_application_activate(GApplication* application) {
   MyApplication* self = MY_APPLICATION(application);
+  // Launched again (app menu, dock, autostart) while already running: the
+  // new process forwarded the activation here and exited, so just bring
+  // Home up instead of creating a second window/tray icon.
+  if (self->window != nullptr) {
+    shoshot_native_app_reactivated();
+    return;
+  }
   GtkWindow* window =
       GTK_WINDOW(gtk_application_window_new(GTK_APPLICATION(application)));
 
@@ -160,6 +169,7 @@ static void my_application_activate(GApplication* application) {
 
   fl_register_plugins(FL_PLUGIN_REGISTRY(view));
   shoshot_native_register(window, view);
+  self->window = window;
 
   gtk_widget_grab_focus(GTK_WIDGET(view));
 }
@@ -230,5 +240,5 @@ MyApplication* my_application_new() {
 
   return MY_APPLICATION(g_object_new(my_application_get_type(),
                                      "application-id", APPLICATION_ID, "flags",
-                                     G_APPLICATION_NON_UNIQUE, nullptr));
+                                     G_APPLICATION_DEFAULT_FLAGS, nullptr));
 }

@@ -112,6 +112,9 @@ class NativeBridge {
   /// and the Flutter content must be clipped to match.
   final windowRounded = ValueNotifier<bool>(true);
 
+  /// Linux: the app was launched again while running (single instance).
+  VoidCallback? onAppReactivated;
+
   /// Linux/Wayland: a shortcut bound through [bindGlobalShortcuts] fired.
   void Function(String id)? onGlobalShortcutActivated;
 
@@ -124,6 +127,8 @@ class NativeBridge {
       if (argb != null) {
         onSystemAccentChanged?.call(SystemAccent(ui.Color(argb)));
       }
+    } else if (call.method == 'appReactivated') {
+      onAppReactivated?.call();
     } else if (call.method == 'windowRoundedChanged') {
       windowRounded.value = call.arguments == true;
     } else if (call.method == 'globalShortcutActivated') {

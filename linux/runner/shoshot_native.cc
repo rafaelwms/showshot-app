@@ -1386,6 +1386,12 @@ void shoshot_register_host_app_id(const char* app_id) {
   }
 }
 
+void shoshot_native_app_reactivated() {
+  if (g_state == nullptr) return;
+  fl_method_channel_invoke_method(g_state->channel, "appReactivated", nullptr,
+                                  nullptr, nullptr, nullptr);
+}
+
 void shoshot_native_register(GtkWindow* window, FlView* view) {
   if (g_state != nullptr) return;
   g_state = new NativeState();

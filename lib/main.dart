@@ -108,7 +108,10 @@ Future<void> main(List<String> args) async {
   // macOS doesn't render frames for it, so waiting for one would leave the
   // app running with no tray icon and no shortcuts.
   await DebugCommandServer.start(services);
-  if (Platform.isLinux) await native.syncWindowRounded();
+  if (Platform.isLinux) {
+    await native.syncWindowRounded();
+    native.onAppReactivated = flow.showHome;
+  }
   await tray.init();
   await hotkeys.init();
   await startup.init();
