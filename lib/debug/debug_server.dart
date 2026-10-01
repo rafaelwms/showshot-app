@@ -357,6 +357,8 @@ class DebugCommandServer {
           return 'portal=${hotkeys.usesPortal} '
               '${CaptureMode.values.map((m) => '${m.name}=${hotkeys.labelFor(m)}').join(' ')} '
               'failed=${hotkeys.failed.map((m) => m.name).join(',')}';
+        case 'configureshortcuts':
+          return 'opened=${await services.hotkeys.configureInSystem()}';
         case 'rebind':
           await services.hotkeys.debugRebind();
           return 'ok';

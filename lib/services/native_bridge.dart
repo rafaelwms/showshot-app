@@ -107,6 +107,11 @@ class NativeBridge {
   /// color in System Settings while the app was running).
   void Function(SystemAccent accent)? onSystemAccentChanged;
 
+  /// Linux: whether the window currently has rounded corners — GTK draws
+  /// them for a free-floating window only (not maximized/full screen/tiled),
+  /// and the Flutter content must be clipped to match.
+  final windowRounded = ValueNotifier<bool>(true);
+
   /// Linux/Wayland: a shortcut bound through [bindGlobalShortcuts] fired.
   void Function(String id)? onGlobalShortcutActivated;
 
@@ -119,6 +124,8 @@ class NativeBridge {
       if (argb != null) {
         onSystemAccentChanged?.call(SystemAccent(ui.Color(argb)));
       }
+    } else if (call.method == 'windowRoundedChanged') {
+      windowRounded.value = call.arguments == true;
     } else if (call.method == 'globalShortcutActivated') {
       final id = call.arguments as String?;
       if (id != null) onGlobalShortcutActivated?.call(id);
@@ -126,6 +133,16 @@ class NativeBridge {
       onGlobalShortcutsChanged?.call(
         BoundShortcut.listFrom(call.arguments as List<Object?>? ?? const []),
       );
+    }
+  }
+
+  /// Linux: reads [windowRounded]'s current value (later changes are pushed).
+  Future<void> syncWindowRounded() async {
+    try {
+      windowRounded.value =
+          await _channel.invokeMethod<bool>('windowRounded') ?? true;
+    } on MissingPluginException {
+      // Other platforms round (or not) at the OS level.
     }
   }
 
@@ -256,6 +273,10 @@ class NativeBridge {
       return const [];
     }
   }
+
+  /// Linux only: hides the window outside of any GTK draw (window_manager's
+  /// hide can run in the middle of one on Wayland and crash, see native).
+  Future<void> hideWindow() => _channel.invokeMethod('hideWindow');
 
   Future<void> enterOverlay(int displayId) =>
       _channel.invokeMethod('enterOverlay', {'displayId': displayId});

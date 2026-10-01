@@ -4,6 +4,9 @@
 #ifdef GDK_WINDOWING_X11
 #include <gdk/gdkx.h>
 #endif
+#ifdef GDK_WINDOWING_WAYLAND
+#include <gdk/gdkwayland.h>
+#endif
 
 #include "flutter/generated_plugin_registrant.h"
 #include "shoshot_native.h"
@@ -28,14 +31,41 @@ static gboolean starts_hidden(MyApplication* self) {
   return FALSE;
 }
 
-// GTK3 on Wayland can still deliver a queued draw to the window right after
-// it was hidden (e.g. hidden moments after being shown), when its wl_surface
-// and EGL surface are already gone: FlView then makes its GL context current
-// on the destroyed surface and segfaults in wl_proxy_get_version. A hidden
-// window has nothing to paint, so drop those draws before they reach FlView.
-static gboolean skip_draw_when_unmapped(GtkWidget* widget, cairo_t*,
-                                        gpointer) {
-  return !gtk_widget_get_mapped(widget);
+// GTK3 on Wayland can deliver a draw to the window while it has no
+// wl_surface — right after it was hidden, or while it's being shown again
+// (GTK destroys the surface on hide and recreates it on show). FlView then
+// creates its EGL surface on a null wl_surface and segfaults in
+// wl_proxy_get_version; easy to hit by hiding/showing in quick succession
+// (backtraced from a core dump). There's nothing to paint at that point, so
+// drop those draws before they reach FlView; the next frame repaints.
+static gboolean skip_draw_without_surface(GtkWidget* widget, cairo_t*,
+                                          gpointer) {
+  GdkWindow* gdk_window = gtk_widget_get_window(widget);
+  if (!gtk_widget_get_mapped(widget) || gdk_window == nullptr ||
+      !gdk_window_is_visible(gdk_window)) {
+    return TRUE;
+  }
+#ifdef GDK_WINDOWING_WAYLAND
+  if (GDK_IS_WAYLAND_WINDOW(gdk_window) &&
+      gdk_wayland_window_get_wl_surface(gdk_window) == nullptr) {
+    return TRUE;
+  }
+#endif
+  return FALSE;
+}
+
+static void guard_renderer_draws(GtkWidget* widget) {
+  if (g_strcmp0(G_OBJECT_TYPE_NAME(widget), "FlViewRenderer") == 0) {
+    g_signal_connect(widget, "draw", G_CALLBACK(skip_draw_without_surface),
+                     nullptr);
+    return;
+  }
+  if (GTK_IS_CONTAINER(widget)) {
+    gtk_container_forall(
+        GTK_CONTAINER(widget),
+        [](GtkWidget* child, gpointer) { guard_renderer_draws(child); },
+        nullptr);
+  }
 }
 
 // Called when first Flutter frame received.
@@ -80,7 +110,24 @@ static void my_application_activate(GApplication* application) {
     gtk_window_set_title(window, "Show Shot");
   }
 
-  g_signal_connect(window, "draw", G_CALLBACK(skip_draw_when_unmapped),
+  // GNOME windows get their rounded corners, shadow and resize edges from
+  // GTK's client-side decorations, not from the compositor (unlike macOS and
+  // Windows 11). Flutter draws its own title bar, so give GTK an empty,
+  // never-shown titlebar: that keeps CSD on without adding a GTK title bar.
+  // The Dart side clips its content to the same radius (`windowRounded`).
+  GtkWidget* no_titlebar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+  gtk_window_set_titlebar(window, no_titlebar);
+  g_autoptr(GtkCssProvider) css = gtk_css_provider_new();
+  gtk_css_provider_load_from_data(
+      css,
+      "window.csd, window.csd decoration { border-radius: 12px; }"
+      "window.csd { background-color: transparent; }",
+      -1, nullptr);
+  gtk_style_context_add_provider_for_screen(
+      gtk_window_get_screen(window), GTK_STYLE_PROVIDER(css),
+      GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+
+  g_signal_connect(window, "draw", G_CALLBACK(skip_draw_without_surface),
                    nullptr);
 
   gtk_window_set_default_size(window, 960, 640);
@@ -94,10 +141,16 @@ static void my_application_activate(GApplication* application) {
   GdkRGBA background_color;
   // Background defaults to black, override it here if necessary, e.g. #00000000
   // for transparent.
-  gdk_rgba_parse(&background_color, "#000000");
+  // Transparent, so the rounded corners Flutter leaves empty show the
+  // desktop (see the CSD note above).
+  gdk_rgba_parse(&background_color, "#00000000");
   fl_view_set_background_color(view, &background_color);
   gtk_widget_show(GTK_WIDGET(view));
   gtk_container_add(GTK_CONTAINER(window), GTK_WIDGET(view));
+  // The GL drawing itself happens in FlView's internal FlViewRenderer
+  // widget, which can have its own GdkWindow (a Wayland subsurface with its
+  // own wl_surface) — guard that one too.
+  guard_renderer_draws(GTK_WIDGET(view));
 
   // Show the window when Flutter renders.
   // Requires the view to be realized so we can start rendering.

@@ -70,12 +70,16 @@ Future<void> main(List<String> args) async {
   DebugHooks.launchSummary =
       'atLogin=${launch.atLogin} args=$args startHidden=$startHidden';
 
-  const options = WindowOptions(
+  final options = WindowOptions(
     size: CaptureFlow.homeSize,
     minimumSize: CaptureFlow.minSize,
     center: true,
     title: 'Show Shot',
-    titleBarStyle: TitleBarStyle.hidden,
+    // Linux keeps GTK's client-side decorations — they draw the rounded
+    // frame and shadow — with an invisible GTK titlebar set natively.
+    titleBarStyle: Platform.isLinux
+        ? TitleBarStyle.normal
+        : TitleBarStyle.hidden,
     backgroundColor: Colors.transparent,
   );
   await windowManager.waitUntilReadyToShow(options, () async {
@@ -104,6 +108,7 @@ Future<void> main(List<String> args) async {
   // macOS doesn't render frames for it, so waiting for one would leave the
   // app running with no tray icon and no shortcuts.
   await DebugCommandServer.start(services);
+  if (Platform.isLinux) await native.syncWindowRounded();
   await tray.init();
   await hotkeys.init();
   await startup.init();

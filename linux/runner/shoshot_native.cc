@@ -27,7 +27,6 @@ struct NativeState {
   FlMethodChannel* channel = nullptr;
   bool overlay = false;
   int overlay_monitor = 0;
-  gboolean saved_decorated = TRUE;
 
   // System accent color, read once via the desktop portal and then kept in
   // sync by subscribing to its change signal (works under both X11 and
@@ -38,6 +37,9 @@ struct NativeState {
 
   // Global shortcuts portal session (Wayland), created on first bind.
   std::string shortcuts_session;
+
+  // Last value sent as `windowRoundedChanged`.
+  bool last_rounded = true;
   guint shortcuts_activated_id = 0;
   guint shortcuts_changed_id = 0;
 };
@@ -439,13 +441,13 @@ void EnterOverlay(NativeState* state, int64_t display_id) {
   auto monitors = EnumerateMonitors();
   const MonitorEntry* m = FindMonitor(monitors, display_id);
   if (!m) return;
-  if (!state->overlay) {
-    state->saved_decorated = gtk_window_get_decorated(state->window);
-    state->overlay = true;
-  }
+  state->overlay = true;
   state->overlay_monitor = m->index;
   gtk_widget_show(GTK_WIDGET(state->window));
-  gtk_window_set_decorated(state->window, FALSE);
+  // No gtk_window_set_decorated(FALSE) here: full screen already drops the
+  // client-side frame and shadow, and toggling decorations on a CSD window
+  // makes GTK3 swap its GdkWindow under FlView's GL context — the next quick
+  // hide/show then segfaults creating an EGL surface for the dead one.
   gtk_window_set_keep_above(state->window, TRUE);
   gtk_window_set_skip_taskbar_hint(state->window, TRUE);
   gtk_window_fullscreen_on_monitor(state->window, gdk_screen_get_default(),
@@ -464,7 +466,6 @@ void ExitOverlay(NativeState* state, double width, double height) {
   gtk_window_unmaximize(state->window);
   gtk_window_set_keep_above(state->window, FALSE);
   gtk_window_set_skip_taskbar_hint(state->window, FALSE);
-  gtk_window_set_decorated(state->window, state->saved_decorated);
   int w = (int)width;
   int h = (int)height;
   if (m) {
@@ -1158,6 +1159,40 @@ void ShowNotification(NativeState* state, FlMethodCall* call,
 }
 
 // ---------------------------------------------------------------------------
+// Window frame. GTK draws the rounded corners (client-side decorations, see
+// my_application.cc) only for a free-floating window; maximized, full screen
+// or tiled windows are square, like every other GNOME app. Dart clips its
+// content to match, so it needs to know which one applies.
+// ---------------------------------------------------------------------------
+
+bool WindowRounded(NativeState* state) {
+  GdkWindow* gdk_window = gtk_widget_get_window(GTK_WIDGET(state->window));
+  if (gdk_window == nullptr) return true;
+  const GdkWindowState square =
+      (GdkWindowState)(GDK_WINDOW_STATE_MAXIMIZED |
+                       GDK_WINDOW_STATE_FULLSCREEN | GDK_WINDOW_STATE_TILED |
+                       GDK_WINDOW_STATE_TOP_TILED |
+                       GDK_WINDOW_STATE_RIGHT_TILED |
+                       GDK_WINDOW_STATE_BOTTOM_TILED |
+                       GDK_WINDOW_STATE_LEFT_TILED);
+  return (gdk_window_get_state(gdk_window) & square) == 0 &&
+         gtk_window_get_decorated(state->window);
+}
+
+gboolean OnWindowStateEvent(GtkWidget*, GdkEventWindowState*,
+                            gpointer user_data) {
+  auto* state = static_cast<NativeState*>(user_data);
+  const bool rounded = WindowRounded(state);
+  if (rounded != state->last_rounded) {
+    state->last_rounded = rounded;
+    g_autoptr(FlValue) value = fl_value_new_bool(rounded);
+    fl_method_channel_invoke_method(state->channel, "windowRoundedChanged",
+                                    value, nullptr, nullptr, nullptr);
+  }
+  return FALSE;
+}
+
+// ---------------------------------------------------------------------------
 // Method dispatch
 // ---------------------------------------------------------------------------
 
@@ -1236,6 +1271,26 @@ void MethodCallHandler(FlMethodChannel*, FlMethodCall* call,
     ExitOverlay(state, ArgDouble(args, "width", 1100),
                 ArgDouble(args, "height", 720));
     response = FL_METHOD_RESPONSE(fl_method_success_response_new(nullptr));
+  } else if (strcmp(method, "hideWindow") == 0) {
+    // Hiding destroys the window's wl_surface. FlView's draw handler can
+    // block waiting for a correctly sized frame, and while it waits it runs
+    // Flutter's platform tasks — including this very method call. Hiding
+    // there pulls the surface out from under the draw in progress (segfault
+    // in wl_proxy_get_version, traced from a core dump). That wait doesn't
+    // iterate the GLib main loop, so hiding from an idle callback is always
+    // outside any draw.
+    g_idle_add(
+        [](gpointer data) -> gboolean {
+          auto* call = FL_METHOD_CALL(data);
+          gtk_widget_hide(GTK_WIDGET(g_state->window));
+          g_autoptr(FlMethodResponse) response =
+              FL_METHOD_RESPONSE(fl_method_success_response_new(nullptr));
+          fl_method_call_respond(call, response, nullptr);
+          g_object_unref(call);
+          return G_SOURCE_REMOVE;
+        },
+        g_object_ref(call));
+    return;
   } else if (strcmp(method, "setClipboardImage") == 0) {
     bool ok = SetClipboardImage(ArgBytes(args, "rgba"),
                                 (int)ArgInt(args, "width", 0),
@@ -1289,6 +1344,9 @@ void MethodCallHandler(FlMethodChannel*, FlMethodCall* call,
     ShowNotification(state, call, ArgString(args, "title"),
                      ArgString(args, "body"));
     return;  // answered from OnNotifyDone
+  } else if (strcmp(method, "windowRounded") == 0) {
+    g_autoptr(FlValue) v = fl_value_new_bool(WindowRounded(state));
+    response = FL_METHOD_RESPONSE(fl_method_success_response_new(v));
   } else if (strcmp(method, "getSystemAccent") == 0) {
     g_autoptr(FlValue) v = fl_value_new_int(state->last_accent_argb);
     response = FL_METHOD_RESPONSE(fl_method_success_response_new(v));
@@ -1340,4 +1398,6 @@ void shoshot_native_register(GtkWindow* window, FlView* view) {
                                             MethodCallHandler, g_state,
                                             nullptr);
   InitSystemAccent(g_state);
+  g_signal_connect(window, "window-state-event",
+                   G_CALLBACK(OnWindowStateEvent), g_state);
 }

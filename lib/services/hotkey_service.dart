@@ -158,9 +158,29 @@ class HotkeyService extends ChangeNotifier {
     return sync();
   }
 
-  /// Wayland: opens the desktop's own UI for changing the shortcuts. False
-  /// when it has none (the caller then points at the system settings).
-  Future<bool> configureInSystem() => native.configureGlobalShortcuts();
+  /// Wayland: opens the desktop's own UI for changing the shortcuts — the
+  /// portal's ConfigureShortcuts where implemented (portal v2), otherwise the
+  /// system settings page that lists them. False if nothing could be opened.
+  Future<bool> configureInSystem() async {
+    if (await native.configureGlobalShortcuts()) return true;
+    final desktop = (Platform.environment['XDG_CURRENT_DESKTOP'] ?? '')
+        .toUpperCase();
+    final command = desktop.contains('KDE')
+        ? ['systemsettings', 'kcm_keys']
+        // GNOME lists an app's global shortcuts on its page in Settings >
+        // Apps (the portal's own dialog points there too).
+        : ['gnome-control-center', 'applications', 'com.rafaelwms.showshot'];
+    try {
+      await Process.start(
+        command.first,
+        command.skip(1).toList(),
+        mode: ProcessStartMode.detached,
+      );
+      return true;
+    } on ProcessException {
+      return false;
+    }
+  }
 
   /// Temporarily suspends shortcuts (e.g. while recording a new one).
   Future<void> suspend() async {

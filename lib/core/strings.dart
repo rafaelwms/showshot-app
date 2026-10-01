@@ -149,6 +149,8 @@ abstract class Strings {
   String get pressKeys;
   String get clearShortcut;
   String get shortcutsHint;
+  String get shortcutsHintPortal;
+  String get shortcutsChangeInSystem;
   String get shortcutRegisterFailed;
   String get version;
   String get website;
@@ -421,6 +423,12 @@ class _Pt extends Strings {
   @override
   String get shortcutsHint =>
       'Os atalhos funcionam globalmente, mesmo com o Show Shot em segundo plano.';
+  @override
+  String get shortcutsHintPortal =>
+      'No Wayland, os atalhos globais são gerenciados pelo sistema: as teclas '
+      'escolhidas lá aparecem aqui.';
+  @override
+  String get shortcutsChangeInSystem => 'Alterar atalhos no sistema';
   @override
   String get shortcutRegisterFailed =>
       'Não foi possível registrar este atalho. Ele pode estar em uso por outro app.';
@@ -702,6 +710,12 @@ class _En extends Strings {
   @override
   String get shortcutsHint =>
       'Shortcuts work globally, even while Show Shot is in the background.';
+  @override
+  String get shortcutsHintPortal =>
+      'On Wayland, global shortcuts are managed by the system: the keys '
+      'chosen there show up here.';
+  @override
+  String get shortcutsChangeInSystem => 'Change shortcuts in the system';
   @override
   String get shortcutRegisterFailed =>
       'This shortcut could not be registered. Another app may already use it.';

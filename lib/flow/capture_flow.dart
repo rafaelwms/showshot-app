@@ -164,7 +164,7 @@ class CaptureFlow extends ChangeNotifier with WindowListener {
       _permissionMissing = false;
 
       if (await windowManager.isVisible()) {
-        await windowManager.hide();
+        await _hideWindow();
         // Give the compositor a moment to remove our window from the screen.
         await Future<void>.delayed(const Duration(milliseconds: 220));
       }
@@ -241,7 +241,7 @@ class CaptureFlow extends ChangeNotifier with WindowListener {
 
       // Hide before restoring the window style so the user never sees the
       // overlay collapse into a regular window.
-      await windowManager.hide();
+      await _hideWindow();
       await _showBlank();
       final size = _editorWindowSize(session.image, session);
       await native.exitOverlay(width: size.width, height: size.height);
@@ -316,7 +316,7 @@ class CaptureFlow extends ChangeNotifier with WindowListener {
   Future<void> closeEditor({FlowMessage? message}) async {
     if (_stage != FlowStage.editor) return;
     await _leaveEditorWindowMode();
-    await windowManager.hide();
+    await _hideWindow();
     await _restoreHiddenWindowFrame();
     await _showBlank();
     _document?.image.dispose();
@@ -369,7 +369,7 @@ class CaptureFlow extends ChangeNotifier with WindowListener {
 
   Future<void> hideWindow() async {
     if (_stage == FlowStage.overlay) return;
-    await windowManager.hide();
+    await _hideWindow();
     _returnToHome = false;
   }
 
@@ -451,6 +451,11 @@ class CaptureFlow extends ChangeNotifier with WindowListener {
     }
     if (await windowManager.isMaximized()) await windowManager.unmaximize();
   }
+
+  /// Linux hides through the native side, never in the middle of a GTK draw
+  /// (window_manager's hide can land inside one on Wayland and crash).
+  Future<void> _hideWindow() =>
+      Platform.isLinux ? native.hideWindow() : windowManager.hide();
 
   /// Linux counterpart of [_leaveEditorWindowMode], for a hidden window.
   Future<void> _restoreHiddenWindowFrame() async {

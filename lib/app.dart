@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import 'core/app_scope.dart';
@@ -35,9 +37,24 @@ class ShoShotApp extends StatelessWidget {
             themeMode: ThemeMode.system,
             initialRoute: '/',
             onGenerateRoute: _onGenerateRoute,
+            builder: Platform.isLinux ? _roundCorners : null,
           );
         },
       ),
+    );
+  }
+
+  /// Linux: macOS and Windows 11 round windows at the OS level; on GNOME
+  /// that's up to the app — GTK draws the rounded frame and shadow (see
+  /// linux/runner/my_application.cc) and the content has to be clipped to
+  /// the same 12px radius, except when maximized / full screen / tiled.
+  Widget _roundCorners(BuildContext context, Widget? child) {
+    return ValueListenableBuilder<bool>(
+      valueListenable: services.native.windowRounded,
+      builder: (context, rounded, child) => rounded
+          ? ClipRRect(borderRadius: BorderRadius.circular(12), child: child)
+          : child!,
+      child: child,
     );
   }
 
