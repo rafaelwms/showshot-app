@@ -12,6 +12,7 @@ import '../../debug/debug_server.dart';
 import '../../flow/capture_flow.dart';
 import '../../models/annotation.dart';
 import '../../services/export_service.dart';
+import '../../services/notification_service.dart';
 import '../widgets/common.dart';
 import 'editor_canvas.dart';
 import 'editor_controller.dart';
@@ -29,6 +30,7 @@ class _EditorScreenState extends State<EditorScreen> {
   final _focusNode = FocusNode();
   final _viewportKey = GlobalKey();
   bool _fitted = false;
+  Size? _lastViewport;
   bool _busy = false;
   bool _wasEditingText = false;
 
@@ -53,6 +55,7 @@ class _EditorScreenState extends State<EditorScreen> {
         _ => _save(),
       };
       _fitted = false;
+      _lastViewport = null;
       if (document.autoSave) {
         WidgetsBinding.instance.addPostFrameCallback(
           (_) => _save(forceDialog: true),
@@ -89,18 +92,22 @@ class _EditorScreenState extends State<EditorScreen> {
     if (_busy) return;
     setState(() => _busy = true);
     final services = AppScope.of(context);
-    final strings = Strings.of(context);
     try {
       final image = await _renderFinal();
       final ok = await services.export.copyToClipboard(image);
       image.dispose();
       if (!mounted) return;
-      _toast(ok ? strings.copied : strings.saveFailed);
+      final message = FlowMessage(
+        ok ? FlowMessageKind.copied : FlowMessageKind.saveFailed,
+      );
+      final delivered = await _announce(message);
       if (ok) {
-        await Future<void>.delayed(const Duration(milliseconds: 700));
-        await services.flow.closeEditor(
-          message: const FlowMessage(FlowMessageKind.copied),
-        );
+        // A notification already said it; otherwise Home's toast repeats the
+        // in-editor one for the moment the editor is closing.
+        if (!delivered) {
+          await Future<void>.delayed(const Duration(milliseconds: 700));
+        }
+        await services.flow.closeEditor(message: delivered ? null : message);
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -138,25 +145,23 @@ class _EditorScreenState extends State<EditorScreen> {
   /// Disposes [image]. Assumes the caller already guarded on `_busy`.
   Future<void> _recognizeAndCopy(ui.Image image) async {
     final services = AppScope.of(context);
-    final strings = Strings.of(context);
     final png = await ExportService.encodePng(image);
     image.dispose();
     final text = await services.ocr.recognize(png);
     if (!mounted) return;
     if (text == null) {
-      _toast(strings.noTextFound);
+      await _announce(const FlowMessage(FlowMessageKind.noTextFound));
       return;
     }
     await Clipboard.setData(ClipboardData(text: text));
     if (!mounted) return;
-    _toast(strings.textCopied);
+    await _announce(const FlowMessage(FlowMessageKind.textCopied));
   }
 
   Future<void> _save({bool forceDialog = false}) async {
     if (_busy) return;
     setState(() => _busy = true);
     final services = AppScope.of(context);
-    final strings = Strings.of(context);
     try {
       final image = await _renderFinal();
       final path = await services.export.save(
@@ -172,13 +177,16 @@ class _EditorScreenState extends State<EditorScreen> {
       }
       image.dispose();
       if (!mounted || path == null) return;
-      _toast(strings.savedTo(path));
-      await Future<void>.delayed(const Duration(milliseconds: 700));
-      await services.flow.closeEditor(
-        message: FlowMessage(FlowMessageKind.saved, path: path),
-      );
+      final message = FlowMessage(FlowMessageKind.saved, path: path);
+      final delivered = await _announce(message);
+      if (!delivered) {
+        await Future<void>.delayed(const Duration(milliseconds: 700));
+      }
+      await services.flow.closeEditor(message: delivered ? null : message);
     } catch (error) {
-      if (mounted) _toast(strings.saveFailed);
+      if (mounted) {
+        await _announce(const FlowMessage(FlowMessageKind.saveFailed));
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -210,6 +218,16 @@ class _EditorScreenState extends State<EditorScreen> {
     }
     if (!mounted) return;
     await AppScope.of(context).flow.closeEditor();
+  }
+
+  /// Tells the user about [message]: an OS notification when possible (true),
+  /// otherwise a toast in the editor (false).
+  Future<bool> _announce(FlowMessage message) async {
+    final services = AppScope.of(context);
+    final strings = Strings.of(context);
+    if (await services.flow.notify(message)) return true;
+    if (mounted) _toast(NotificationService.textFor(strings, message));
+    return false;
   }
 
   void _toast(String text) {
@@ -346,7 +364,9 @@ class _EditorScreenState extends State<EditorScreen> {
                       ),
                     ),
                     child: Padding(
-                      padding: const EdgeInsets.only(top: 44),
+                      padding: const EdgeInsets.only(
+                        top: WindowTitleBar.defaultHeight,
+                      ),
                       child: _buildViewport(controller),
                     ),
                   ),
@@ -359,7 +379,7 @@ class _EditorScreenState extends State<EditorScreen> {
                 ),
                 Positioned(
                   left: 14,
-                  top: 64,
+                  top: WindowTitleBar.defaultHeight + 20,
                   bottom: 84,
                   child: Center(child: ToolRail(controller: controller)),
                 ),
@@ -480,11 +500,19 @@ class _EditorScreenState extends State<EditorScreen> {
     return LayoutBuilder(
       key: _viewportKey,
       builder: (context, constraints) {
-        if (!_fitted && constraints.biggest.width > 0) {
+        // Fit on first layout, and again whenever the window is resized
+        // (e.g. it was maximized after opening) as long as the user hasn't
+        // zoomed away from the fitted view.
+        if (constraints.biggest.width > 0 &&
+            constraints.biggest != _lastViewport) {
+          final refit = !_fitted || controller.isFitted;
           _fitted = true;
-          WidgetsBinding.instance.addPostFrameCallback(
-            (_) => controller.fitTo(constraints.biggest),
-          );
+          _lastViewport = constraints.biggest;
+          if (refit) {
+            WidgetsBinding.instance.addPostFrameCallback(
+              (_) => controller.fitTo(constraints.biggest),
+            );
+          }
         }
         return Listener(
           // Two-finger trackpad scroll pans even while a drawing tool is active.
@@ -540,6 +568,9 @@ class _EditorCanvasState extends State<_EditorCanvas> {
     switch (controller.tool) {
       case ToolType.select:
         final p = _hover;
+        if (p != null && controller.isOverRotationHandle(p)) {
+          return SystemMouseCursors.grab;
+        }
         if (p != null && controller.isOverHandle(p)) {
           return SystemMouseCursors.precise;
         }
@@ -602,16 +633,21 @@ class _EditorCanvasState extends State<_EditorCanvas> {
                 Positioned(
                   left: editing.position.dx - 6,
                   top: editing.position.dy - 6,
-                  child: _TextEditorBox(
-                    key: ValueKey(editing.id),
-                    annotation: editing,
-                    maxWidth: (size.width - editing.position.dx + 6).clamp(
-                      120.0,
-                      size.width,
+                  // Rotated text is edited rotated too, around its center
+                  // (which is what the finished annotation turns around).
+                  child: Transform.rotate(
+                    angle: editing.rotation,
+                    child: _TextEditorBox(
+                      key: ValueKey(editing.id),
+                      annotation: editing,
+                      maxWidth: (size.width - editing.position.dx + 6).clamp(
+                        120.0,
+                        size.width,
+                      ),
+                      onChanged: controller.updateEditingText,
+                      onCommit: controller.commitTextEditing,
+                      onCancel: controller.cancelTextEditing,
                     ),
-                    onChanged: controller.updateEditingText,
-                    onCommit: controller.commitTextEditing,
-                    onCancel: controller.cancelTextEditing,
                   ),
                 ),
             ],

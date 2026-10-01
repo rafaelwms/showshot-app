@@ -9,15 +9,27 @@ import '../widgets/common.dart';
 import 'editor_controller.dart';
 
 class _ToolSpec {
-  const _ToolSpec(this.tool, this.icon, this.shortcut, {this.angle = 0});
+  const _ToolSpec(
+    this.tool,
+    this.icon,
+    this.shortcut, {
+    this.angle = 0,
+    this.customIcon,
+  });
   final ToolType tool;
-  final IconData icon;
+  final IconData? icon;
   final String shortcut;
   final double angle;
+
+  /// For glyphs the Material icon set doesn't have (used instead of [icon]).
+  final Widget Function(Color color, double size)? customIcon;
 }
 
+Widget _cursorIcon(Color color, double size) =>
+    _CursorIcon(color: color, size: size);
+
 const _tools = <_ToolSpec>[
-  _ToolSpec(ToolType.select, Icons.north_west_rounded, 'V'),
+  _ToolSpec(ToolType.select, null, 'V', customIcon: _cursorIcon),
   _ToolSpec(ToolType.hand, Icons.back_hand_outlined, 'H'),
   _ToolSpec(ToolType.arrow, Icons.north_east_rounded, 'A'),
   _ToolSpec(
@@ -128,17 +140,79 @@ class _RailButton extends StatelessWidget {
             ),
             child: Transform.rotate(
               angle: spec.angle,
-              child: Icon(
-                spec.icon,
-                size: 19,
-                color: active ? Colors.white : context.palette.textMuted,
-              ),
+              child: () {
+                final color = active ? Colors.white : context.palette.textMuted;
+                return spec.customIcon?.call(color, 19) ??
+                    Icon(spec.icon, size: 19, color: color);
+              }(),
             ),
           ),
         ),
       ),
     );
   }
+}
+
+/// The classic mouse-pointer arrow. Material has no cursor glyph, and its
+/// arrows (`north_west`, `near_me`…) read as the Arrow tool sitting right
+/// below the Select tool in the rail.
+class _CursorIcon extends StatelessWidget {
+  const _CursorIcon({required this.color, required this.size});
+
+  final Color color;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) => SizedBox.square(
+    dimension: size,
+    child: CustomPaint(painter: _CursorPainter(color)),
+  );
+}
+
+class _CursorPainter extends CustomPainter {
+  const _CursorPainter(this.color);
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // Drawn in a 24x24 box: tip at the top-left, tail pointing down-right.
+    canvas.scale(size.width / 24, size.height / 24);
+    // Material glyphs leave ~2px of padding inside their 24px box; this path
+    // fills it, so shrink it about its center to match the neighbouring icons.
+    canvas.translate(12, 12);
+    canvas.scale(0.6);
+    canvas.translate(-12.1, -12.2);
+    final path = Path()
+      ..moveTo(5.5, 2.8)
+      ..lineTo(5.5, 19.4)
+      ..lineTo(9.9, 15.4)
+      ..lineTo(12.9, 21.6)
+      ..lineTo(15.9, 20.2)
+      ..lineTo(12.9, 14.2)
+      ..lineTo(18.7, 13.9)
+      ..close();
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = color
+        ..style = PaintingStyle.fill
+        ..isAntiAlias = true,
+    );
+    // A thin same-color outline rounds the corners.
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = color
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.4
+        ..strokeJoin = StrokeJoin.round
+        ..isAntiAlias = true,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_CursorPainter old) => old.color != color;
 }
 
 class _RailDivider extends StatelessWidget {
@@ -178,6 +252,9 @@ class PropertiesBar extends StatelessWidget {
     final targetIsBlur = selected is ShapeAnnotation
         ? selected.kind == ShapeKind.blur
         : tool == ToolType.blur;
+    final targetIsFreehand = selected is StrokeAnnotation
+        ? true
+        : selected == null && (tool == ToolType.pen || tool == ToolType.marker);
     final showColor = !targetIsBlur && tool != ToolType.hand;
     final ratio = controller.pixelRatio;
 
@@ -214,6 +291,22 @@ class PropertiesBar extends StatelessWidget {
               style.copyWith(strokeWidth: (v * ratio).roundToDouble()),
             ),
           ),
+          if (targetIsFreehand) ...[
+            const _BarDivider(),
+            _LabeledSlider(
+              icon: Icons.waves_rounded,
+              label: strings.smoothing,
+              value: style.smoothing,
+              min: 0,
+              max: 1,
+              display: style.smoothing <= 0
+                  ? strings.smoothingOff
+                  : '${(style.smoothing * 100).round()}%',
+              onChanged: (v) => controller.setStyle(
+                style.copyWith(smoothing: (v * 20).round() / 20),
+              ),
+            ),
+          ],
           if (!targetIsBlur) ...[
             const _BarDivider(),
             _LabeledSlider(

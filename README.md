@@ -17,11 +17,11 @@ Site: <https://showshot.rafaelwms.com>
 | Área | O que faz |
 | --- | --- |
 | **Captura** | Área selecionada, janela específica (clique), tela inteira ou texto (OCR). A tela é congelada no momento do disparo — pelo atalho ou pelo menu do tray. |
-| **Overlay de seleção** | Escurecimento fora da seleção, destaque automático da janela sob o cursor, lupa de precisão com coordenadas, handles de redimensionamento, guias de terços, tamanho em pixels, atalhos (`Space` tela inteira, `Enter` confirma, `Esc` cancela, setas movem 1px / `Shift`+setas 10px, `⌘/Ctrl+C` copia, `⌘/Ctrl+S` salva, `⌘/Ctrl+E` edita, `⌘/Ctrl+T` extrai texto). |
+| **Overlay de seleção** | Escurecimento fora da seleção, destaque automático da janela sob o cursor (só no modo Janela), lupa de precisão com coordenadas, handles de redimensionamento, guias de terços, tamanho em pixels, atalhos (`⌘/Ctrl+A` seleciona a tela inteira, `Enter` confirma, `Esc` cancela, setas movem 1px / `Shift`+setas 10px, `⌘/Ctrl+C` copia, `⌘/Ctrl+S` salva, `⌘/Ctrl+E` edita, `⌘/Ctrl+T` extrai texto). No modo Texto a barra só tem cancelar e confirmar: confirmar já copia o texto reconhecido. |
 | **Texto (OCR)** | Reconhece o texto de uma seleção e copia direto para a área de transferência. macOS usa o framework Vision e Windows usa `Windows.Media.Ocr` (ambos on-device, sem configuração); Linux tenta `tesseract` se estiver instalado. |
-| **Editor** | Seta, linha, retângulo, elipse, caneta, marcador, texto, numeração de passos, desfoque, **extrair texto** (arrasta uma região e reconhece só o que está nela); seleção/mover/redimensionar; paleta + cor personalizada (HSV/hex); espessura, transparência, preenchimento, tamanho de fonte; desfazer/refazer; zoom (roda do mouse, pinça, `⌘/Ctrl +/-/0/1`), pan (ferramenta mão ou `Espaço`). |
+| **Editor** | Seta, linha, retângulo, elipse, caneta, marcador, texto, numeração de passos, desfoque, **extrair texto** (arrasta uma região e reconhece só o que está nela); seleção com **mover, redimensionar e girar** qualquer marcação (inclusive texto — as alças dos cantos do texto alteram o tamanho da fonte, e as do desenho livre/marcador ampliam ou reduzem o traço — `Shift` mantém a proporção; **suavizador de curvas** (desligado, ou 5–100%) para caneta e marcador, ajustável depois de desenhar; `Shift` prende a rotação em passos de 15°); paleta + cor personalizada (HSV/hex); espessura, transparência, preenchimento, tamanho de fonte; desfazer/refazer; zoom (roda do mouse, pinça, `⌘/Ctrl +/-/0/1`), pan (ferramenta mão ou `Espaço`). |
 | **Saída** | Copiar para a área de transferência (PNG + bitmap nativo), salvar PNG/JPG com diálogo ou direto na pasta padrão (`Imagens/ShowShot`), copiar ao salvar, lista de capturas recentes. |
-| **Sistema** | Ícone na barra de menu (macOS/Linux) e tray (Windows), atalhos globais configuráveis, iniciar com o sistema, ocultar/mostrar ícone no Dock (macOS), idioma PT/EN automático. |
+| **Sistema** | Ícone na barra de menu (macOS/Linux) e tray (Windows), atalhos globais configuráveis, janela do editor configurável (maximizada por padrão, tela cheia ou tamanho da captura), ação do clique esquerdo no ícone da barra de menu/bandeja configurável (padrão: captura de área; o clique direito abre o menu), notificações do sistema para "copiado"/"salvo"/"texto copiado" (desligáveis), iniciar com o sistema (abre discretamente só no tray/barra de menu, sem mostrar a janela), ocultar/mostrar ícone no Dock (macOS), idioma PT/EN automático. |
 
 ### Atalhos padrão
 
@@ -37,7 +37,7 @@ combinação; `Backspace` remove).
 
 ### Atalhos do editor
 
-`V` selecionar · `H` mover tela · `A` seta · `L` linha · `R` retângulo · `E` elipse ·
+`V` selecionar (alça circular acima do objeto gira; `Shift` = passos de 15°) · `H` mover tela · `A` seta · `L` linha · `R` retângulo · `E` elipse ·
 `P` caneta · `M` marcador · `T` texto · `N` numeração · `B` desfoque ·
 `O` extrair texto (arraste uma região; não deixa anotação, só copia o texto reconhecido) ·
 `⌘/Ctrl+Z` desfazer · `⌘/Ctrl+Shift+Z` refazer · `Delete` excluir seleção ·
@@ -157,11 +157,15 @@ printf 'select 100 100 600 400\nconfirm edit\n' | nc 127.0.0.1 47391
 printf 'tool arrow\ndraw 50 50 300 200\ntext 100 300 Olá\naction save\n' | nc 127.0.0.1 47391
 ```
 
-Comandos: `capture area|window|fullScreen|text`, `select x y w h`, `hover x y`, `windows`,
+Comandos: `capture area|window|fullScreen|text [fromHome]`, `select x y w h`, `hover x y`, `windows`,
 `confirm edit|copy|save|extractText|cancel`, `tool <nome>`, `draw x1 y1 x2 y2 [...]`, `text x y <texto>`,
 `color AARRGGBB`, `style <espessura> <opacidade> [fill]`, `undo`,
+`demo` (abre o editor numa imagem gerada — não precisa da permissão de gravação de tela),
+`draw shift x1 y1 …` (arrasta com `Shift`), `typing x y <texto>` + `commit` (edita texto sem confirmar),
+`dump` (anotações, alças e ângulos), `render` (grava o PNG exportado em `~/Pictures/shoshot_debug_render.png`),
+`launch` (como o app foi iniciado), `visible` (janela visível?),
 `action save|saveAs|copy|extractText|discard`,
-`setting ask|copyAfterSave|magnifier|jpg|language true|false|<valor>`, `home`, `settings`,
+`setting ask|copyAfterSave|magnifier|jpg|language true|false|<valor>`, `home`, `banner on|off` (aviso de permissão de gravação de tela na Home), `settings`,
 `hide`, `close`, `stage`, `settingsBack`, `quit`.
 
 ---

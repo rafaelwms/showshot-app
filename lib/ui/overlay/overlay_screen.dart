@@ -57,7 +57,7 @@ class _OverlayScreenState extends State<OverlayScreen> {
     DebugHooks.overlayConfirm = _finish;
     DebugHooks.overlayHover = (point) => setState(() {
       _cursor = point;
-      _hoverWindow = _selection == null ? _session?.windowAt(point) : null;
+      _hoverWindow = _selection == null ? _windowAt(point) : null;
     });
   }
 
@@ -71,6 +71,11 @@ class _OverlayScreenState extends State<OverlayScreen> {
   }
 
   CaptureSession? get _session => AppScope.of(context).flow.session;
+
+  /// Windows can only be picked in window mode. Area and text mode are pure
+  /// drag-a-rectangle modes: no hover highlight, no click-to-capture-window.
+  WindowInfo? _windowAt(Offset point) =>
+      _session?.mode == CaptureMode.window ? _session?.windowAt(point) : null;
 
   /// True while the overlay is a pure window picker: no magnifier, crosshair
   /// or precision cursor make sense here since the whole window is the
@@ -101,9 +106,7 @@ class _OverlayScreenState extends State<OverlayScreen> {
     if (_completing) return;
     setState(() {
       _cursor = event.localPosition;
-      _hoverWindow = _selection == null
-          ? _session?.windowAt(event.localPosition)
-          : null;
+      _hoverWindow = _selection == null ? _windowAt(event.localPosition) : null;
     });
   }
 
@@ -115,7 +118,7 @@ class _OverlayScreenState extends State<OverlayScreen> {
       if (_selection != null) {
         setState(() {
           _selection = null;
-          _hoverWindow = _session?.windowAt(p);
+          _hoverWindow = _windowAt(p);
         });
       } else {
         _finish(OverlayAction.cancel);
@@ -139,7 +142,7 @@ class _OverlayScreenState extends State<OverlayScreen> {
       } else {
         _drag = _DragKind.create;
         _selection = null;
-        _hoverWindow = _session?.windowAt(p);
+        _hoverWindow = _windowAt(p);
       }
     });
   }
@@ -160,7 +163,7 @@ class _OverlayScreenState extends State<OverlayScreen> {
             // Window mode is a picker, not a free-form area selector: keep
             // the hover highlight following the cursor and never build an
             // arbitrary rectangle, even if the click wobbles a few pixels.
-            _hoverWindow = _session?.windowAt(p);
+            _hoverWindow = _windowAt(p);
             return;
           }
           if (!_moved) return;
@@ -236,7 +239,7 @@ class _OverlayScreenState extends State<OverlayScreen> {
       // the click wobbled past the "did it drag" threshold. Area mode only
       // does this for a genuinely un-dragged (plain) click.
       if (_drag == _DragKind.create && (isWindowMode || !_moved)) {
-        final window = _session?.windowAt(event.localPosition);
+        final window = _windowAt(event.localPosition);
         if (window != null) {
           _selection = window.bounds;
           _hoverWindow = null;
@@ -247,7 +250,7 @@ class _OverlayScreenState extends State<OverlayScreen> {
         _selection = null;
       }
       if (_selection == null) {
-        _hoverWindow = _session?.windowAt(event.localPosition);
+        _hoverWindow = _windowAt(event.localPosition);
       }
       _drag = null;
       _anchor = null;
@@ -294,22 +297,23 @@ class _OverlayScreenState extends State<OverlayScreen> {
         ? keyboard.isMetaPressed
         : keyboard.isControlPressed;
     final size = context.size ?? Size.zero;
+    final isTextMode = _session?.mode == CaptureMode.text;
 
     if (key == LogicalKeyboardKey.escape) {
       _finish(OverlayAction.cancel);
     } else if (key == LogicalKeyboardKey.enter ||
         key == LogicalKeyboardKey.numpadEnter) {
       _confirmDefault();
-    } else if (key == LogicalKeyboardKey.space) {
+    } else if (command && key == LogicalKeyboardKey.keyA) {
       setState(() {
         _selection = Offset.zero & size;
         _hoverWindow = null;
       });
-    } else if (command && key == LogicalKeyboardKey.keyC) {
+    } else if (!isTextMode && command && key == LogicalKeyboardKey.keyC) {
       _finish(OverlayAction.copy);
-    } else if (command && key == LogicalKeyboardKey.keyS) {
+    } else if (!isTextMode && command && key == LogicalKeyboardKey.keyS) {
       _finish(OverlayAction.save);
-    } else if (command && key == LogicalKeyboardKey.keyE) {
+    } else if (!isTextMode && command && key == LogicalKeyboardKey.keyE) {
       _finish(OverlayAction.edit);
     } else if (command && key == LogicalKeyboardKey.keyT) {
       _finish(OverlayAction.extractText);
@@ -549,9 +553,6 @@ class _OverlayScreenState extends State<OverlayScreen> {
     final visible = _selection == null && _drag == null;
     final isWindowMode = mode == CaptureMode.window;
     final primary = isWindowMode ? strings.hintClickWindow : strings.hintDrag;
-    // Window mode never drags a rectangle, so the "click a window" tip only
-    // makes sense as a secondary hint in area mode.
-    final secondary = isWindowMode ? null : strings.hintClickWindow;
     // Keep the hint away from the cursor so it never blocks the target.
     final nearTop = _cursor != null && _cursor!.dy < 120;
     return AnimatedPositioned(
@@ -587,21 +588,11 @@ class _OverlayScreenState extends State<OverlayScreen> {
                       fontSize: 13,
                     ),
                   ),
-                  if (secondary != null) ...[
-                    _dot(),
-                    Text(
-                      secondary,
-                      style: TextStyle(
-                        color: context.palette.textMuted,
-                        fontSize: 12.5,
-                      ),
-                    ),
-                  ],
                   _dot(),
-                  const KeyCap('Space', light: true),
+                  KeyCap(Platform.isMacOS ? '⌘A' : 'Ctrl+A', light: true),
                   const SizedBox(width: 6),
                   Text(
-                    strings.hintSpace,
+                    strings.hintSelectAll,
                     style: TextStyle(
                       color: context.palette.textMuted,
                       fontSize: 12.5,
@@ -637,7 +628,7 @@ class _OverlayScreenState extends State<OverlayScreen> {
     const barHeight = 44.0;
     // The bar sizes itself to its content (see `mainAxisSize.min` below); this
     // is only an estimate used to keep it from being positioned off-screen.
-    const estimatedWidth = 240.0;
+    final estimatedWidth = isTextMode ? 96.0 : 240.0;
     const gap = 10.0;
     double top;
     if (sel.bottom + gap + barHeight <= size.height - 8) {
@@ -669,41 +660,52 @@ class _OverlayScreenState extends State<OverlayScreen> {
               onPressed: () => _finish(OverlayAction.cancel),
               danger: true,
             ),
-            const SizedBox(width: 2),
-            ToolButton(
-              icon: Icons.save_alt_rounded,
-              tooltip: strings.save,
-              shortcut: '${command}S',
-              onPressed: () => _finish(OverlayAction.save),
-            ),
-            const SizedBox(width: 2),
-            ToolButton(
-              icon: Icons.copy_rounded,
-              tooltip: strings.copy,
-              shortcut: '${command}C',
-              onPressed: () => _finish(OverlayAction.copy),
-            ),
-            const SizedBox(width: 2),
-            ToolButton(
-              icon: Icons.text_fields_rounded,
-              tooltip: strings.extractText,
-              shortcut: '${command}T',
-              active: isTextMode,
-              onPressed: () => _finish(OverlayAction.extractText),
-            ),
-            Container(
-              width: 1,
-              height: 22,
-              margin: const EdgeInsets.symmetric(horizontal: 6),
-              color: context.palette.borderStrong,
-            ),
-            ToolButton(
-              icon: Icons.brush_rounded,
-              tooltip: strings.edit,
-              shortcut: '${command}E',
-              active: !isTextMode,
-              onPressed: () => _finish(OverlayAction.edit),
-            ),
+            if (isTextMode)
+              // Text mode has a single purpose: confirming copies the
+              // recognized text straight to the clipboard.
+              ToolButton(
+                icon: Icons.check_rounded,
+                tooltip: strings.extractText,
+                shortcut: 'Enter',
+                active: true,
+                onPressed: () => _finish(OverlayAction.extractText),
+              )
+            else ...[
+              const SizedBox(width: 2),
+              ToolButton(
+                icon: Icons.save_alt_rounded,
+                tooltip: strings.save,
+                shortcut: '${command}S',
+                onPressed: () => _finish(OverlayAction.save),
+              ),
+              const SizedBox(width: 2),
+              ToolButton(
+                icon: Icons.copy_rounded,
+                tooltip: strings.copy,
+                shortcut: '${command}C',
+                onPressed: () => _finish(OverlayAction.copy),
+              ),
+              const SizedBox(width: 2),
+              ToolButton(
+                icon: Icons.text_fields_rounded,
+                tooltip: strings.extractText,
+                shortcut: '${command}T',
+                onPressed: () => _finish(OverlayAction.extractText),
+              ),
+              Container(
+                width: 1,
+                height: 22,
+                margin: const EdgeInsets.symmetric(horizontal: 6),
+                color: context.palette.borderStrong,
+              ),
+              ToolButton(
+                icon: Icons.brush_rounded,
+                tooltip: strings.edit,
+                shortcut: '${command}E',
+                active: true,
+                onPressed: () => _finish(OverlayAction.edit),
+              ),
+            ],
           ],
         ),
       ),

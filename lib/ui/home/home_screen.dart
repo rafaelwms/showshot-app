@@ -5,9 +5,9 @@ import 'package:flutter/material.dart';
 import '../../core/app_scope.dart';
 import '../../core/strings.dart';
 import '../../core/theme.dart';
-import '../../flow/capture_flow.dart';
 import '../../models/capture_mode.dart';
 import '../../services/hotkey_service.dart';
+import '../../services/notification_service.dart';
 import '../widgets/common.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -18,10 +18,21 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  // The capture column scrolls on its own (see `build`); it needs its own
+  // controller because the recent-captures grid beside it already claims the
+  // PrimaryScrollController.
+  final _captureScroll = ScrollController();
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _showPendingMessage());
+  }
+
+  @override
+  void dispose() {
+    _captureScroll.dispose();
+    super.dispose();
   }
 
   void _showPendingMessage() {
@@ -31,14 +42,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (message == null) return;
     services.flow.consumeMessage();
     final strings = Strings.of(context);
-    final text = switch (message.kind) {
-      FlowMessageKind.copied => strings.copied,
-      FlowMessageKind.saved => strings.savedTo(message.path ?? ''),
-      FlowMessageKind.saveFailed => strings.saveFailed,
-      FlowMessageKind.captureFailed => strings.captureFailed,
-      FlowMessageKind.textCopied => strings.textCopied,
-      FlowMessageKind.noTextFound => strings.noTextFound,
-    };
+    final text = NotificationService.textFor(strings, message);
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
   }
 
@@ -99,7 +103,16 @@ class _HomeScreenState extends State<HomeScreen> {
                             ? Row(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Expanded(flex: 11, child: left),
+                                  // Scrolls only when it has to: with the
+                                  // permission banner up, the four cards no
+                                  // longer fit the default 960x640 window.
+                                  Expanded(
+                                    flex: 11,
+                                    child: SingleChildScrollView(
+                                      controller: _captureScroll,
+                                      child: left,
+                                    ),
+                                  ),
                                   const SizedBox(width: 28),
                                   Expanded(flex: 8, child: right),
                                 ],
@@ -180,7 +193,7 @@ class _CaptureColumn extends StatelessWidget {
             hotKeyText: hotKeyLabel(settings.hotKeys[mode]),
             hotKeyFailed: services.hotkeys.failed.contains(mode),
             enabled: !flow.busy,
-            onTap: () => flow.start(mode),
+            onTap: () => flow.start(mode, fromHome: true),
           ),
           const SizedBox(height: 10),
         ],

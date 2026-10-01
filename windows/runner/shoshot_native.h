@@ -7,6 +7,7 @@
 #include <windows.h>
 
 #include <memory>
+#include <string>
 
 // Native bridge for ShoShot (Windows).
 //
@@ -40,6 +41,7 @@ class ShoShotNative {
   void RecognizeText(
       std::vector<uint8_t> png,
       std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
+  bool ShowNotification(const std::string& title, const std::string& body);
 
  public:
   // Called by FlutterWindow::MessageHandler on WM_SETTINGCHANGE /

@@ -32,5 +32,9 @@
 	<true/>
 	<key>NSScreenCaptureUsageDescription</key>
 	<string>Show Shot precisa gravar a tela para capturar screenshots.</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.productivity</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 </dict>
 </plist>

@@ -12,6 +12,7 @@ import 'services/capture_service.dart';
 import 'services/export_service.dart';
 import 'services/hotkey_service.dart';
 import 'services/native_bridge.dart';
+import 'services/notification_service.dart';
 import 'services/ocr_service.dart';
 import 'services/settings_service.dart';
 import 'services/startup_service.dart';
@@ -26,7 +27,9 @@ Future<void> main(List<String> args) async {
   final settings = await SettingsService.load();
   final native = NativeBridge.instance;
   final capture = CaptureService(native);
-  final export = ExportService(native);
+  final export = ExportService(native)
+    ..onBookmarkRefreshed = (bookmark) =>
+        settings.update((s) => s.copyWith(saveDirectoryBookmark: bookmark));
   final ocr = OcrService(native);
   final flow = CaptureFlow(
     settings: settings,
@@ -34,6 +37,7 @@ Future<void> main(List<String> args) async {
     capture: capture,
     export: export,
     ocr: ocr,
+    notifications: NotificationService(settings: settings, native: native),
   );
   final hotkeys = HotkeyService(settings: settings, onTrigger: flow.start);
   final tray = TrayService(
@@ -49,8 +53,17 @@ Future<void> main(List<String> args) async {
   // accent color before swapping to the real OS one.
   await systemTheme.init();
 
+  // Start silently in the menu bar / tray when the OS launched us at login
+  // (or a dev passed `--hidden`). Windows/Linux entries pass `--autostart`
+  // through `args`; a macOS login item can't carry arguments, so the native
+  // side reports it (see `NativeBridge.launchInfo`).
+  final launch = await native.launchInfo();
   final startHidden =
-      args.contains(StartupService.launchArg) || args.contains('--hidden');
+      launch.atLogin ||
+      args.contains(StartupService.launchArg) ||
+      args.contains('--hidden');
+  DebugHooks.launchSummary =
+      'atLogin=${launch.atLogin} args=$args startHidden=$startHidden';
 
   const options = WindowOptions(
     size: CaptureFlow.homeSize,
@@ -81,17 +94,18 @@ Future<void> main(List<String> args) async {
   );
   runApp(ShoShotApp(services: services));
 
-  // Background integrations can come up after the first frame.
-  WidgetsBinding.instance.addPostFrameCallback((_) async {
-    await DebugCommandServer.start(services);
-    await tray.init();
-    await hotkeys.init();
-    await startup.init();
-    if (Platform.isMacOS) {
-      await native.setDockIconVisible(settings.settings.showDockIcon);
-      settings.addListener(
-        () => native.setDockIconVisible(settings.settings.showDockIcon),
-      );
-    }
-  });
+  // Background integrations (tray, hotkeys, launch-at-login). Deliberately
+  // not tied to the first frame: on a silent start the window is hidden and
+  // macOS doesn't render frames for it, so waiting for one would leave the
+  // app running with no tray icon and no shortcuts.
+  await DebugCommandServer.start(services);
+  await tray.init();
+  await hotkeys.init();
+  await startup.init();
+  if (Platform.isMacOS) {
+    await native.setDockIconVisible(settings.settings.showDockIcon);
+    settings.addListener(
+      () => native.setDockIconVisible(settings.settings.showDockIcon),
+    );
+  }
 }

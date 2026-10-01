@@ -1,14 +1,32 @@
 #include "flutter_window.h"
 
 #include <optional>
+#include <string>
+#include <vector>
 
 #include "flutter/generated_plugin_registrant.h"
+#include "utils.h"
 
 // Not declared in every SDK version's winuser.h; DWM broadcasts it whenever
 // the user changes their accent color in Settings > Personalization.
 #ifndef WM_DWMCOLORIZATIONCOLORCHANGED
 #define WM_DWMCOLORIZATIONCOLORCHANGED 0x0320
 #endif
+
+namespace {
+
+// True when the process was started by the launch-at-login entry
+// (`--autostart`, see StartupService.launchArg in Dart) or with `--hidden`.
+bool StartsHidden() {
+  for (const std::string& arg : GetCommandLineArguments()) {
+    if (arg == "--autostart" || arg == "--hidden") {
+      return true;
+    }
+  }
+  return false;
+}
+
+}  // namespace
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
     : project_(project) {}
@@ -35,9 +53,15 @@ bool FlutterWindow::OnCreate() {
       GetHandle(), flutter_controller_->engine()->messenger());
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
-  flutter_controller_->engine()->SetNextFrameCallback([&]() {
-    this->Show();
-  });
+  // Launched at login (`--autostart`) or with `--hidden`: stay in the tray.
+  // The Dart side shows the window itself (window_manager) on a normal
+  // start, so skipping the template's unconditional first-frame Show() only
+  // changes the silent case. The window is created without WS_VISIBLE.
+  if (!StartsHidden()) {
+    flutter_controller_->engine()->SetNextFrameCallback([&]() {
+      this->Show();
+    });
+  }
 
   // Flutter can complete the first frame before the "show window" callback is
   // registered. The following call ensures a frame is pending to ensure the

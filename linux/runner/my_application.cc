@@ -15,8 +15,24 @@ struct _MyApplication {
 
 G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
 
+// True when started by the launch-at-login entry (`--autostart`, see
+// StartupService.launchArg in Dart) or with `--hidden`.
+static gboolean starts_hidden(MyApplication* self) {
+  if (self->dart_entrypoint_arguments == nullptr) return FALSE;
+  for (char** arg = self->dart_entrypoint_arguments; *arg != nullptr; ++arg) {
+    if (g_strcmp0(*arg, "--autostart") == 0 ||
+        g_strcmp0(*arg, "--hidden") == 0) {
+      return TRUE;
+    }
+  }
+  return FALSE;
+}
+
 // Called when first Flutter frame received.
 static void first_frame_cb(MyApplication* self, FlView* view) {
+  // Silent start: stay in the tray. On a normal start the Dart side shows the
+  // window itself (window_manager), so this only changes the hidden case.
+  if (starts_hidden(self)) return;
   gtk_widget_show(gtk_widget_get_toplevel(GTK_WIDGET(view)));
 }
 

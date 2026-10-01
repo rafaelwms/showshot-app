@@ -3,6 +3,7 @@ import FlutterMacOS
 import ImageIO
 import ScreenCaptureKit
 import ServiceManagement
+import UserNotifications
 import Vision
 
 /// Native bridge for ShoShot (macOS).
@@ -34,6 +35,7 @@ final class ShoShotNative: NSObject {
       self?.handle(call, result: result)
     }
     observeSystemAccent()
+    UNUserNotificationCenter.current().delegate = self
     // Backs the `launch_at_startup` package using SMAppService (macOS 13+).
     launchChannel = FlutterMethodChannel(name: "launch_at_startup", binaryMessenger: messenger)
     launchChannel.setMethodCallHandler { call, result in
@@ -104,6 +106,11 @@ final class ShoShotNative: NSObject {
         NSWorkspace.shared.open(url)
       }
       result(nil)
+    case "notify":
+      notify(
+        title: (args["title"] as? String) ?? "",
+        body: (args["body"] as? String) ?? "",
+        result: result)
     case "setDockIconVisible":
       let visible = (args["visible"] as? Bool) ?? false
       NSApp.setActivationPolicy(visible ? .regular : .accessory)
@@ -113,8 +120,24 @@ final class ShoShotNative: NSObject {
         NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
       }
       result(nil)
+    case "bookmarkDirectory":
+      guard let path = args["path"] as? String else {
+        result(nil)
+        return
+      }
+      result(bookmarkDirectory(path: path))
+    case "resolveDirectoryBookmark":
+      guard let data = (args["bookmark"] as? FlutterStandardTypedData)?.data else {
+        result(nil)
+        return
+      }
+      result(resolveDirectoryBookmark(data))
     case "getSystemAccent":
       result(currentAccentARGB())
+    case "launchInfo":
+      // `SMAppService` login items can't carry command-line arguments, so
+      // this is how Dart learns the app was launched at login.
+      result(["atLogin": AppDelegate.launchedAsLoginItem])
     case "recognizeText":
       guard let png = (args["png"] as? FlutterStandardTypedData)?.data else {
         result(nil)
@@ -124,6 +147,46 @@ final class ShoShotNative: NSObject {
     default:
       result(FlutterMethodNotImplemented)
     }
+  }
+
+  // MARK: - Save folder (security-scoped bookmark)
+
+  // Under App Sandbox, a folder picked in NSOpenPanel is only writable for the
+  // rest of that launch. A security-scoped bookmark, created while that access
+  // is still live and persisted by Dart, restores it on later launches.
+  private var scopedDirectory: URL?
+
+  private func bookmarkDirectory(path: String) -> FlutterStandardTypedData? {
+    do {
+      let data = try URL(fileURLWithPath: path, isDirectory: true).bookmarkData(
+        options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil)
+      return FlutterStandardTypedData(bytes: data)
+    } catch {
+      NSLog("ShoShot: bookmarkDirectory failed: \(error)")
+      return nil
+    }
+  }
+
+  /// Resolves the bookmark and starts accessing the folder for the rest of the
+  /// launch (only one custom folder is ever active). Returns `{path, bookmark}`
+  /// — `bookmark` is a refreshed copy when the stored one went stale (folder
+  /// moved/renamed), else nil — or nil when it can't be resolved at all.
+  private func resolveDirectoryBookmark(_ data: Data) -> [String: Any]? {
+    var stale = false
+    guard let url = try? URL(resolvingBookmarkData: data, options: .withSecurityScope,
+                             relativeTo: nil, bookmarkDataIsStale: &stale),
+          url.startAccessingSecurityScopedResource() else {
+      return nil
+    }
+    if let previous = scopedDirectory, previous != url {
+      previous.stopAccessingSecurityScopedResource()
+    }
+    scopedDirectory = url
+    var refreshed: FlutterStandardTypedData?
+    if stale {
+      refreshed = bookmarkDirectory(path: url.path)
+    }
+    return ["path": url.path, "bookmark": refreshed as Any]
   }
 
   // MARK: - System accent color
@@ -338,6 +401,38 @@ final class ShoShotNative: NSObject {
     let h = min(height, visible.height - 40)
     let frame = NSRect(x: visible.midX - w / 2, y: visible.midY - h / 2, width: w, height: h)
     window.setFrame(frame, display: true)
+    (window as? MainFlutterWindow)?.layoutTrafficLights()
+  }
+
+  // MARK: - Notifications
+
+  /// Posts a system notification. Asks for permission the first time; replies
+  /// `true` only when the notification was actually handed to the system
+  /// (the user allowed notifications), so Dart can fall back to an in-app
+  /// toast otherwise.
+  private func notify(title: String, body: String, result: @escaping FlutterResult) {
+    let center = UNUserNotificationCenter.current()
+    let reply: (Bool) -> Void = { ok in DispatchQueue.main.async { result(ok) } }
+    let deliver = {
+      let content = UNMutableNotificationContent()
+      content.title = title
+      content.body = body
+      let request = UNNotificationRequest(
+        identifier: UUID().uuidString, content: content, trigger: nil)
+      center.add(request) { error in reply(error == nil) }
+    }
+    center.getNotificationSettings { settings in
+      switch settings.authorizationStatus {
+      case .authorized, .provisional:
+        deliver()
+      case .notDetermined:
+        center.requestAuthorization(options: [.alert]) { granted, _ in
+          if granted { deliver() } else { reply(false) }
+        }
+      default:
+        reply(false)
+      }
+    }
   }
 
   // MARK: - Text recognition
@@ -381,5 +476,17 @@ final class ShoShotNative: NSObject {
     let pasteboard = NSPasteboard.general
     pasteboard.clearContents()
     return pasteboard.writeObjects([image])
+  }
+}
+
+// Without a delegate macOS suppresses notifications while the app is the
+// active one — and it is, whenever the editor or Home is on screen.
+extension ShoShotNative: UNUserNotificationCenterDelegate {
+  func userNotificationCenter(
+    _ center: UNUserNotificationCenter,
+    willPresent notification: UNNotification,
+    withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+  ) {
+    completionHandler([.banner, .list])
   }
 }

@@ -1,5 +1,7 @@
 #include "shoshot_native.h"
 
+#include "resource.h"
+
 #include <dwmapi.h>
 #include <flutter/standard_method_codec.h>
 #include <shellapi.h>
@@ -333,6 +335,10 @@ void ShoShotNative::HandleMethodCall(
       ILFree(pidl);
     }
     result->Success();
+  } else if (method == "notify") {
+    bool ok = ShowNotification(GetArg<std::string>(args, "title", ""),
+                               GetArg<std::string>(args, "body", ""));
+    result->Success(EncodableValue(ok));
   } else if (method == "getSystemAccent") {
     result->Success(EncodableValue(CurrentAccentArgb()));
   } else if (method == "recognizeText") {
@@ -344,6 +350,49 @@ void ShoShotNative::HandleMethodCall(
   } else {
     result->NotImplemented();
   }
+}
+
+namespace {
+
+// Removes the short-lived notification icon once its balloon has had time to
+// show (see ShowNotification). `id` is the timer id, which doubles as the
+// NOTIFYICONDATA uID.
+VOID CALLBACK RemoveNotificationIcon(HWND hwnd, UINT, UINT_PTR id, DWORD) {
+  NOTIFYICONDATAW nid = {};
+  nid.cbSize = sizeof(nid);
+  nid.hWnd = hwnd;
+  nid.uID = static_cast<UINT>(id);
+  Shell_NotifyIconW(NIM_DELETE, &nid);
+  KillTimer(hwnd, id);
+}
+
+}  // namespace
+
+// Windows shows a shell "balloon" as a toast. It has to hang off a tray icon,
+// and the app's real tray icon belongs to the tray plugin, so this adds a
+// second icon (the app's own) just for the balloon and removes it a few
+// seconds later.
+bool ShoShotNative::ShowNotification(const std::string& title,
+                                     const std::string& body) {
+  static UINT next_id = 0x5300;
+  UINT id = ++next_id;
+  std::wstring wide_title = WideFromUtf8(title);
+  std::wstring wide_body = WideFromUtf8(body);
+
+  NOTIFYICONDATAW nid = {};
+  nid.cbSize = sizeof(nid);
+  nid.hWnd = hwnd_;
+  nid.uID = id;
+  nid.uFlags = NIF_ICON | NIF_TIP | NIF_INFO;
+  nid.hIcon = LoadIconW(GetModuleHandleW(nullptr),
+                        MAKEINTRESOURCEW(IDI_APP_ICON));
+  lstrcpynW(nid.szTip, L"Show Shot", ARRAYSIZE(nid.szTip));
+  lstrcpynW(nid.szInfoTitle, wide_title.c_str(), ARRAYSIZE(nid.szInfoTitle));
+  lstrcpynW(nid.szInfo, wide_body.c_str(), ARRAYSIZE(nid.szInfo));
+  nid.dwInfoFlags = NIIF_USER | NIIF_NOSOUND;
+  if (!Shell_NotifyIconW(NIM_ADD, &nid)) return false;
+  SetTimer(hwnd_, id, 8000, RemoveNotificationIcon);
+  return true;
 }
 
 int64_t ShoShotNative::CurrentAccentArgb() {
