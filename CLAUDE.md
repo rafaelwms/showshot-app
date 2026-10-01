@@ -18,7 +18,7 @@ flutter run -d macos|windows|linux       # run in debug (starts the debug automa
 flutter build macos|windows|linux --release
 ```
 
-There is no automated test suite yet (`test/` is empty — the app is verified via `flutter analyze` plus the debug automation server below). If you add tests, `flutter test` / `flutter test test/some_test.dart` is standard.
+The automated test suite is tiny (`test/hotkey_format_test.dart`, run with `flutter test`) — the app is mostly verified via `flutter analyze` plus the debug automation server below (`tool/debug_client.py` talks to it).
 
 ### Debug automation server (no mouse/keyboard needed)
 
