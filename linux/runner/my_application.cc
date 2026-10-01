@@ -28,6 +28,16 @@ static gboolean starts_hidden(MyApplication* self) {
   return FALSE;
 }
 
+// GTK3 on Wayland can still deliver a queued draw to the window right after
+// it was hidden (e.g. hidden moments after being shown), when its wl_surface
+// and EGL surface are already gone: FlView then makes its GL context current
+// on the destroyed surface and segfaults in wl_proxy_get_version. A hidden
+// window has nothing to paint, so drop those draws before they reach FlView.
+static gboolean skip_draw_when_unmapped(GtkWidget* widget, cairo_t*,
+                                        gpointer) {
+  return !gtk_widget_get_mapped(widget);
+}
+
 // Called when first Flutter frame received.
 static void first_frame_cb(MyApplication* self, FlView* view) {
   // Silent start: stay in the tray. On a normal start the Dart side shows the
@@ -69,6 +79,9 @@ static void my_application_activate(GApplication* application) {
   } else {
     gtk_window_set_title(window, "Show Shot");
   }
+
+  g_signal_connect(window, "draw", G_CALLBACK(skip_draw_when_unmapped),
+                   nullptr);
 
   gtk_window_set_default_size(window, 960, 640);
   gtk_window_set_position(window, GTK_WIN_POS_CENTER);
