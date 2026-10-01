@@ -308,6 +308,7 @@ class CaptureFlow extends ChangeNotifier with WindowListener {
     if (_stage != FlowStage.editor) return;
     await _leaveEditorWindowMode();
     await windowManager.hide();
+    await _restoreHiddenWindowFrame();
     await _showBlank();
     _document?.image.dispose();
     _document = null;
@@ -424,6 +425,13 @@ class CaptureFlow extends ChangeNotifier with WindowListener {
   /// Undoes [_openEditor]'s maximize / full screen so the window goes back to
   /// a normal frame (Home and the overlay size it themselves).
   Future<void> _leaveEditorWindowMode() async {
+    // Linux (GTK3 on Wayland): leaving full screen / maximized on a *visible*
+    // window is a compositor round trip that queues a redraw, and hiding the
+    // window right after makes GTK draw on its already-destroyed surface — a
+    // segfault in libwayland-client. Done on the hidden window instead, it's
+    // a purely local state change, so [closeEditor] calls
+    // [_restoreHiddenWindowFrame] after hiding.
+    if (Platform.isLinux) return;
     if (await windowManager.isFullScreen()) {
       // macOS animates the exit, and hiding the window mid-animation gets
       // undone when it finishes: wait for the real "left full screen" event.
@@ -434,6 +442,16 @@ class CaptureFlow extends ChangeNotifier with WindowListener {
     }
     if (await windowManager.isMaximized()) await windowManager.unmaximize();
   }
+
+  /// Linux counterpart of [_leaveEditorWindowMode], for a hidden window.
+  Future<void> _restoreHiddenWindowFrame() async {
+    if (!Platform.isLinux) return;
+    if (await windowManager.isFullScreen()) {
+      await windowManager.setFullScreen(false);
+    }
+    if (await windowManager.isMaximized()) await windowManager.unmaximize();
+  }
+
 
   Completer<void>? _leftFullScreen;
 
