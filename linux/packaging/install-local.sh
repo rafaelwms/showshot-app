@@ -35,7 +35,8 @@ for arg in "$@"; do
     --uninstall)
       rm -rf "$LIB_DIR" "$BIN_LINK" "$DESKTOP_FILE"
       find "$PREFIX/icons/hicolor" -name "$APP_ID.png" -delete 2>/dev/null || true
-      rm -f "$HOME/.config/autostart/$APP_ID.desktop" 2>/dev/null || true
+      # launch_at_startup names it after the display name.
+      rm -f "$HOME/.config/autostart/Show Shot.desktop" 2>/dev/null || true
       update-desktop-database "$PREFIX/applications" 2>/dev/null || true
       gtk-update-icon-cache -q -t "$PREFIX/icons/hicolor" 2>/dev/null || true
       echo "Show Shot uninstalled."

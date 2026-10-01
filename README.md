@@ -126,22 +126,42 @@ flutter pub get
 
 ### Linux
 
-Dependências de build (Debian/Ubuntu):
+Alvo principal: Ubuntu 26.04 (GNOME/Wayland), x64 e arm64. Dependências de build
+(Debian/Ubuntu):
 
 ```bash
 sudo apt-get install clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev \
-  libx11-dev libxi-dev libkeybinder-3.0-dev
+  libx11-dev libxi-dev libkeybinder-3.0-dev libayatana-appindicator3-dev
 ```
 
-- `libx11-dev`: captura e lista de janelas nativas (X11).
-- `libkeybinder-3.0-dev`: atalhos globais (`hotkey_manager`).
-- `libxi-dev`: ícone do tray (`tray_manager`).
+- `libx11-dev`: captura e lista de janelas nativas em sessões X11.
+- `libkeybinder-3.0-dev`: atalhos globais em X11 (`hotkey_manager`) — exigido no build mesmo
+  em Wayland.
+- `libayatana-appindicator3-dev` e `libxi-dev`: ícone na barra (`tray_manager`).
+- Opcional, para o modo Texto (OCR): `sudo apt-get install tesseract-ocr tesseract-ocr-por`
+  (o idioma do sistema + inglês são usados automaticamente, se o pacote existir).
 
-`flutter run -d linux` ou `flutter build linux --release`.
+`flutter run -d linux` ou `flutter build linux --release`. Para instalar o build no usuário
+atual (atalho no menu de apps, ícone no dock e identidade estável para as permissões do
+sistema):
 
-Em sessões **Wayland** a captura nativa e os atalhos globais não estão disponíveis
-(limitação do protocolo): o app usa as ferramentas de screenshot do desktop e a detecção
-de janelas fica desligada. Use uma sessão X11 (ou XWayland) para a experiência completa.
+```bash
+linux/packaging/install-local.sh            # último build release
+linux/packaging/install-local.sh --uninstall
+```
+
+**Wayland (GNOME):** tudo passa pelos portais do sistema (`xdg-desktop-portal`):
+
+- **Captura:** portal Screenshot. Na primeira captura o GNOME pede uma autorização única
+  ("Permitir que o Show Shot faça capturas de tela?"); ela fica salva.
+- **Atalhos globais:** portal GlobalShortcuts. Na primeira execução o GNOME mostra os
+  atalhos sugeridos (`Ctrl+Shift+1…4`) para você confirmar; para mudá-los depois, use
+  *Configurações → Atalhos → Alterar atalhos no sistema* (abre a página do app nas
+  Configurações do GNOME).
+- **Modo Janela:** o Wayland não permite listar janelas; a escolha é feita na ferramenta
+  de captura do próprio GNOME (aba Janela), e o resultado abre direto no editor.
+
+Em sessões **X11** a captura, a lista de janelas e os atalhos são nativos (sem portais).
 
 ---
 
@@ -174,8 +194,12 @@ Comandos: `capture area|window|fullScreen|text [fromHome]`, `select x y w h`, `h
 
 - O overlay cobre apenas o display sob o cursor (múltiplos monitores são suportados um por
   vez).
-- Windows está validado em hardware real (x64 e arm64), incluindo OCR. Linux ainda foi
-  escrito contra as APIs oficiais mas segue sem validação em máquina real.
+- Windows está validado em hardware real (x64 e arm64), incluindo OCR. Linux está
+  validado em Ubuntu 26.04 x64 (GNOME 50, Wayland); arm64 compila do mesmo código, mas
+  precisa ser buildado numa máquina arm64 (o `flutter build linux` não faz cross-compile).
+- Linux/Wayland com vários monitores ainda não foi testado: o Wayland não informa a
+  posição do cursor fora da janela do app, então a escolha do monitor a capturar pode não
+  seguir o cursor.
 - OCR (captura de Texto) está implementado de verdade no macOS (framework Vision) e no
   Windows (`Windows.Media.Ocr`, via C++/WinRT). No Linux, depende de `tesseract` estar
   instalado no sistema.
