@@ -6,7 +6,6 @@ import '../../core/app_scope.dart';
 import '../../core/strings.dart';
 import '../../core/theme.dart';
 import '../../models/capture_mode.dart';
-import '../../services/hotkey_service.dart';
 import '../../services/notification_service.dart';
 import '../widgets/common.dart';
 
@@ -148,7 +147,6 @@ class _CaptureColumn extends StatelessWidget {
   Widget build(BuildContext context) {
     final services = AppScope.of(context);
     final strings = Strings.of(context);
-    final settings = services.settings.settings;
     final flow = services.flow;
 
     return Column(
@@ -190,7 +188,7 @@ class _CaptureColumn extends StatelessWidget {
         for (final mode in CaptureMode.values) ...[
           _CaptureCard(
             mode: mode,
-            hotKeyText: hotKeyLabel(settings.hotKeys[mode]),
+            hotKeyText: services.hotkeys.labelFor(mode),
             hotKeyFailed: services.hotkeys.failed.contains(mode),
             enabled: !flow.busy,
             onTap: () => flow.start(mode, fromHome: true),
@@ -228,17 +226,17 @@ class _CaptureColumn extends StatelessWidget {
                 padding: const EdgeInsets.only(top: 10),
                 child: Row(
                   children: [
-                    const Icon(
-                      Icons.warning_amber_rounded,
+                    Icon(
+                      Icons.info_outline_rounded,
                       size: 15,
-                      color: AppColors.warning,
+                      color: context.palette.textFaint,
                     ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         strings.waylandWarning,
                         style: TextStyle(
-                          color: context.palette.textMuted,
+                          color: context.palette.textFaint,
                           fontSize: 12,
                         ),
                       ),
@@ -376,7 +374,7 @@ class _PermissionBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final strings = Strings.of(context);
-    final native = AppScope.of(context).native;
+    final services = AppScope.of(context);
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -409,17 +407,27 @@ class _PermissionBanner extends StatelessWidget {
           const SizedBox(height: 10),
           Row(
             children: [
-              AccentButton(
-                label: strings.permissionOpenSettings,
-                compact: true,
-                onPressed: native.openScreenAccessSettings,
-              ),
-              const SizedBox(width: 8),
-              GhostButton(
-                label: strings.permissionRequest,
-                compact: true,
-                onPressed: native.requestScreenAccess,
-              ),
+              // Linux has no settings page to send people to; the portal's
+              // own dialog is the whole flow.
+              if (Platform.isLinux)
+                AccentButton(
+                  label: strings.permissionRequest,
+                  compact: true,
+                  onPressed: services.flow.requestScreenAccess,
+                )
+              else ...[
+                AccentButton(
+                  label: strings.permissionOpenSettings,
+                  compact: true,
+                  onPressed: services.native.openScreenAccessSettings,
+                ),
+                const SizedBox(width: 8),
+                GhostButton(
+                  label: strings.permissionRequest,
+                  compact: true,
+                  onPressed: services.flow.requestScreenAccess,
+                ),
+              ],
             ],
           ),
         ],

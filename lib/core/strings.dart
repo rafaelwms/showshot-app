@@ -149,6 +149,8 @@ abstract class Strings {
   String get pressKeys;
   String get clearShortcut;
   String get shortcutsHint;
+  String get shortcutsHintPortal;
+  String get shortcutsChangeInSystem;
   String get shortcutRegisterFailed;
   String get version;
   String get website;
@@ -195,15 +197,20 @@ class _Pt extends Strings {
   @override
   String get removeFromList => 'Remover da lista';
   @override
-  String get permissionTitle => 'Permissão de gravação de tela';
+  String get permissionTitle => Platform.isLinux
+      ? 'Permissão para capturar a tela'
+      : 'Permissão de gravação de tela';
   @override
-  String get permissionBody =>
-      'O macOS exige permissão de "Gravação de Tela" para capturar screenshots. '
-      'Depois de autorizar em Ajustes do Sistema, reinicie o Show Shot.';
+  String get permissionBody => Platform.isLinux
+      ? 'O sistema pede uma autorização única antes da primeira captura. '
+            'Clique em "Permitir capturas" e confirme na janela do sistema.'
+      : 'O macOS exige permissão de "Gravação de Tela" para capturar screenshots. '
+            'Depois de autorizar em Ajustes do Sistema, reinicie o Show Shot.';
   @override
   String get permissionOpenSettings => 'Abrir Ajustes do Sistema';
   @override
-  String get permissionRequest => 'Solicitar permissão';
+  String get permissionRequest =>
+      Platform.isLinux ? 'Permitir capturas' : 'Solicitar permissão';
   @override
   String get quit => 'Sair do Show Shot';
   @override
@@ -353,10 +360,13 @@ class _Pt extends Strings {
   String get showDockIconHint =>
       'Por padrão o Show Shot vive apenas na barra de menu.';
   @override
-  String get showTaskbarIcon => 'Mostrar ícone na Barra de tarefas';
+  String get showTaskbarIcon => Platform.isLinux
+      ? 'Mostrar ícone no Dock'
+      : 'Mostrar ícone na Barra de tarefas';
   @override
-  String get showTaskbarIconHint =>
-      'Desligado, o Show Shot vive apenas na bandeja do sistema.';
+  String get showTaskbarIconHint => Platform.isLinux
+      ? 'Desligado, o Show Shot vive apenas na barra superior.'
+      : 'Desligado, o Show Shot vive apenas na bandeja do sistema.';
   @override
   String get language => 'Idioma';
   @override
@@ -417,6 +427,12 @@ class _Pt extends Strings {
   String get shortcutsHint =>
       'Os atalhos funcionam globalmente, mesmo com o Show Shot em segundo plano.';
   @override
+  String get shortcutsHintPortal =>
+      'No Wayland, os atalhos globais são gerenciados pelo sistema: as teclas '
+      'escolhidas lá aparecem aqui.';
+  @override
+  String get shortcutsChangeInSystem => 'Alterar atalhos no sistema';
+  @override
   String get shortcutRegisterFailed =>
       'Não foi possível registrar este atalho. Ele pode estar em uso por outro app.';
   @override
@@ -433,7 +449,7 @@ class _Pt extends Strings {
   String get platformNotes => 'Notas da plataforma';
   @override
   String get waylandWarning =>
-      'Sessão Wayland detectada: a captura usa ferramentas do sistema e a detecção de janelas fica indisponível.';
+      'Sessão Wayland: no modo Janela, a janela é escolhida na ferramenta de captura do sistema.';
 }
 
 class _En extends Strings {
@@ -472,15 +488,20 @@ class _En extends Strings {
   @override
   String get removeFromList => 'Remove from list';
   @override
-  String get permissionTitle => 'Screen recording permission';
+  String get permissionTitle => Platform.isLinux
+      ? 'Screen capture permission'
+      : 'Screen recording permission';
   @override
-  String get permissionBody =>
-      'macOS requires the "Screen Recording" permission to take screenshots. '
-      'After granting it in System Settings, restart Show Shot.';
+  String get permissionBody => Platform.isLinux
+      ? 'Your system asks for a one-time authorization before the first '
+            'capture. Click "Allow captures" and confirm in the system dialog.'
+      : 'macOS requires the "Screen Recording" permission to take screenshots. '
+            'After granting it in System Settings, restart Show Shot.';
   @override
   String get permissionOpenSettings => 'Open System Settings';
   @override
-  String get permissionRequest => 'Request permission';
+  String get permissionRequest =>
+      Platform.isLinux ? 'Allow captures' : 'Request permission';
   @override
   String get quit => 'Quit Show Shot';
   @override
@@ -630,10 +651,12 @@ class _En extends Strings {
   String get showDockIconHint =>
       'By default Show Shot lives only in the menu bar.';
   @override
-  String get showTaskbarIcon => 'Show taskbar icon';
+  String get showTaskbarIcon =>
+      Platform.isLinux ? 'Show Dock icon' : 'Show taskbar icon';
   @override
-  String get showTaskbarIconHint =>
-      'When off, Show Shot lives only in the system tray.';
+  String get showTaskbarIconHint => Platform.isLinux
+      ? 'When off, Show Shot lives only in the top bar.'
+      : 'When off, Show Shot lives only in the system tray.';
   @override
   String get language => 'Language';
   @override
@@ -693,6 +716,12 @@ class _En extends Strings {
   String get shortcutsHint =>
       'Shortcuts work globally, even while Show Shot is in the background.';
   @override
+  String get shortcutsHintPortal =>
+      'On Wayland, global shortcuts are managed by the system: the keys '
+      'chosen there show up here.';
+  @override
+  String get shortcutsChangeInSystem => 'Change shortcuts in the system';
+  @override
   String get shortcutRegisterFailed =>
       'This shortcut could not be registered. Another app may already use it.';
   @override
@@ -709,5 +738,5 @@ class _En extends Strings {
   String get platformNotes => 'Platform notes';
   @override
   String get waylandWarning =>
-      'Wayland session detected: capture uses system tools and window detection is unavailable.';
+      "Wayland session: in Window mode, you pick the window in the system's screenshot tool.";
 }

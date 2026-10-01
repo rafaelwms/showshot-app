@@ -36,9 +36,25 @@ class CaptureService {
           displays.firstWhere((d) => d.isPrimary, orElse: () => displays.first),
     );
 
+    // Wayland has no window list to pick from in our overlay: let the
+    // desktop's own screenshot UI do the picking (GNOME: click a window).
+    if (info.isWayland && mode == CaptureMode.window) {
+      final png = await _native.captureScreenshotPortal(interactive: true);
+      return CaptureSession(
+        mode: mode,
+        display: display,
+        image: await _decode(png),
+        windows: const [],
+        pickedByDesktop: true,
+        pixelRatio: display.scale,
+      );
+    }
+
     final imageFuture = info.supportsNativeCapture
         ? _captureNative(display)
-        : _captureWithSystemTools(display);
+        : (info.isWayland
+              ? _captureWayland(display)
+              : _captureWithSystemTools(display));
     final windowsFuture =
         info.supportsWindowList && mode != CaptureMode.fullScreen
         ? _native.listWindows()
@@ -67,8 +83,31 @@ class CaptureService {
     }
   }
 
-  /// Linux/Wayland fallback: ask a desktop screenshot tool to write a PNG and
-  /// crop it to the target display.
+  /// Linux/Wayland: `org.freedesktop.portal.Screenshot`, falling back to a
+  /// CLI screenshot tool if the portal call fails (missing/older portal).
+  Future<ui.Image> _captureWayland(DisplayInfo display) async {
+    try {
+      final png = await _native.captureScreenshotPortal();
+      return await _cropToDisplay(await _decode(png), display);
+    } on PlatformException catch (error) {
+      if (error.code == 'cancelled') rethrow;
+      debugPrint(
+        'Portal screenshot failed (${error.code}: ${error.message}); '
+        'falling back to CLI tools',
+      );
+      return await _captureWithSystemTools(display);
+    }
+  }
+
+  Future<ui.Image> _decode(Uint8List png) async {
+    final codec = await ui.instantiateImageCodec(png);
+    final frame = await codec.getNextFrame();
+    codec.dispose();
+    return frame.image;
+  }
+
+  /// Fallback for platforms with no portal (or an older one): ask a desktop
+  /// screenshot tool to write a PNG and crop it to the target display.
   Future<ui.Image> _captureWithSystemTools(DisplayInfo display) async {
     final tmp = await getTemporaryDirectory();
     final path =

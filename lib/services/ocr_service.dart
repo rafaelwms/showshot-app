@@ -33,13 +33,16 @@ class OcrService {
     final input = File(inputPath);
     try {
       await input.writeAsBytes(png, flush: true);
+      final languages = await _tesseractLanguages();
       // `stdout` as the output base tells tesseract to print the result
-      // instead of writing a `.txt` file.
+      // instead of writing a `.txt` file. `--psm 3` (automatic layout) copes
+      // with the scattered blocks/columns screenshots tend to have.
       final result = await Process.run('tesseract', [
         inputPath,
         'stdout',
+        if (languages.isNotEmpty) ...['-l', languages],
         '--psm',
-        '6',
+        '3',
       ]);
       if (result.exitCode != 0) return null;
       final text = (result.stdout as String).trim();
@@ -53,5 +56,40 @@ class OcrService {
     } finally {
       if (await input.exists()) await input.delete();
     }
+  }
+
+  String? _languages;
+
+  /// tesseract only reads English unless told otherwise, which drops accents
+  /// (Portuguese "não" comes out as "nao"). Use the OS language plus English,
+  /// limited to the traineddata packs actually installed
+  /// (`tesseract-ocr-por`, …).
+  Future<String> _tesseractLanguages() async {
+    if (_languages != null) return _languages!;
+    final installed = <String>{};
+    try {
+      final result = await Process.run('tesseract', ['--list-langs']);
+      // First line is a header ("List of available languages in …").
+      installed.addAll(
+        (result.stdout as String).split('\n').skip(1).map((l) => l.trim()),
+      );
+    } catch (_) {}
+    const iso639_2 = {
+      'pt': 'por',
+      'en': 'eng',
+      'es': 'spa',
+      'fr': 'fra',
+      'de': 'deu',
+      'it': 'ita',
+      'nl': 'nld',
+      'pl': 'pol',
+      'ru': 'rus',
+      'ja': 'jpn',
+      'zh': 'chi_sim',
+      'ko': 'kor',
+    };
+    final system = iso639_2[Platform.localeName.split(RegExp('[_.-]')).first];
+    final wanted = {?system, 'eng'}.where(installed.contains);
+    return _languages = wanted.join('+');
   }
 }

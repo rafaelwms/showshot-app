@@ -31,6 +31,25 @@ class RawCapture {
   }
 }
 
+/// A shortcut as the desktop actually bound it (Linux/Wayland portal).
+class BoundShortcut {
+  const BoundShortcut({required this.id, required this.trigger});
+
+  final String id;
+
+  /// Human-readable, from the desktop (e.g. "Ctrl+Shift+1"); may be empty
+  /// when the user left the shortcut unassigned.
+  final String trigger;
+
+  static List<BoundShortcut> listFrom(List<Object?> raw) => [
+    for (final item in raw.whereType<Map<Object?, Object?>>())
+      BoundShortcut(
+        id: item['id'] as String? ?? '',
+        trigger: item['trigger'] as String? ?? '',
+      ),
+  ];
+}
+
 /// Static facts about the native layer for the current platform.
 class NativePlatformInfo {
   const NativePlatformInfo({
@@ -39,6 +58,7 @@ class NativePlatformInfo {
     required this.supportsNativeCapture,
     required this.needsScreenPermission,
     required this.isWayland,
+    this.globalShortcutsPortal = false,
   });
 
   final bool globalIsPhysical;
@@ -46,6 +66,10 @@ class NativePlatformInfo {
   final bool supportsNativeCapture;
   final bool needsScreenPermission;
   final bool isWayland;
+
+  /// Linux/Wayland: global shortcuts go through the desktop portal (apps
+  /// can't grab keys themselves there).
+  final bool globalShortcutsPortal;
 
   static const fallback = NativePlatformInfo(
     globalIsPhysical: false,
@@ -83,14 +107,84 @@ class NativeBridge {
   /// color in System Settings while the app was running).
   void Function(SystemAccent accent)? onSystemAccentChanged;
 
+  /// Linux: whether the window currently has rounded corners — GTK draws
+  /// them for a free-floating window only (not maximized/full screen/tiled),
+  /// and the Flutter content must be clipped to match.
+  final windowRounded = ValueNotifier<bool>(true);
+
+  /// Linux: the app was launched again while running (single instance).
+  VoidCallback? onAppReactivated;
+
+  /// Linux/Wayland: a shortcut bound through [bindGlobalShortcuts] fired.
+  void Function(String id)? onGlobalShortcutActivated;
+
+  /// Linux/Wayland: the user changed our shortcuts in the desktop's settings.
+  void Function(List<BoundShortcut> shortcuts)? onGlobalShortcutsChanged;
+
   Future<void> _handleIncoming(MethodCall call) async {
     if (call.method == 'systemAccentChanged') {
       final argb = (call.arguments as num?)?.toInt();
       if (argb != null) {
         onSystemAccentChanged?.call(SystemAccent(ui.Color(argb)));
       }
+    } else if (call.method == 'appReactivated') {
+      onAppReactivated?.call();
+    } else if (call.method == 'windowRoundedChanged') {
+      windowRounded.value = call.arguments == true;
+    } else if (call.method == 'globalShortcutActivated') {
+      final id = call.arguments as String?;
+      if (id != null) onGlobalShortcutActivated?.call(id);
+    } else if (call.method == 'globalShortcutsChanged') {
+      onGlobalShortcutsChanged?.call(
+        BoundShortcut.listFrom(call.arguments as List<Object?>? ?? const []),
+      );
     }
   }
+
+  /// Linux: reads [windowRounded]'s current value (later changes are pushed).
+  Future<void> syncWindowRounded() async {
+    try {
+      windowRounded.value =
+          await _channel.invokeMethod<bool>('windowRounded') ?? true;
+    } on MissingPluginException {
+      // Other platforms round (or not) at the OS level.
+    }
+  }
+
+  /// Linux/Wayland: asks the desktop (`org.freedesktop.portal.
+  /// GlobalShortcuts`) to bind [shortcuts]. GNOME shows its own confirmation
+  /// dialog the first time and may assign different keys than the preferred
+  /// ones — the result says what's actually bound. Throws [PlatformException]
+  /// (`cancelled` when the user declined).
+  Future<List<BoundShortcut>> bindGlobalShortcuts(
+    List<({String id, String description, String trigger})> shortcuts,
+  ) async {
+    final list = await _channel.invokeListMethod<Object?>(
+      'bindGlobalShortcuts',
+      {
+        'shortcuts': [
+          for (final s in shortcuts)
+            {'id': s.id, 'description': s.description, 'trigger': s.trigger},
+        ],
+      },
+    );
+    return BoundShortcut.listFrom(list ?? const []);
+  }
+
+  /// Opens the desktop's own UI to change the bound shortcuts. False when the
+  /// portal can't (older desktops) — fall back to the system settings.
+  Future<bool> configureGlobalShortcuts() async {
+    try {
+      return await _channel.invokeMethod<bool>('configureGlobalShortcuts') ??
+          false;
+    } on MissingPluginException {
+      return false;
+    }
+  }
+
+  /// [platformInfo]'s result once it has been read (it's read at startup),
+  /// for synchronous checks in widget builds.
+  NativePlatformInfo? get cachedPlatformInfo => _info;
 
   Future<NativePlatformInfo> platformInfo() async {
     if (_info != null) return _info!;
@@ -104,6 +198,7 @@ class NativeBridge {
         supportsNativeCapture: map?['supportsNativeCapture'] == true,
         needsScreenPermission: map?['needsScreenPermission'] == true,
         isWayland: map?['wayland'] == true,
+        globalShortcutsPortal: map?['globalShortcutsPortal'] == true,
       );
     } on MissingPluginException {
       _info = NativePlatformInfo.fallback;
@@ -157,6 +252,24 @@ class NativeBridge {
     );
   }
 
+  /// Linux/Wayland only: `org.freedesktop.portal.Screenshot`, returned as
+  /// PNG bytes of the whole screen (the portal has no per-monitor concept).
+  /// [interactive] lets the desktop show its own screenshot UI first (GNOME:
+  /// pick an area, window or screen) and returns what the user took there.
+  Future<Uint8List> captureScreenshotPortal({bool interactive = false}) async {
+    final bytes = await _channel.invokeMethod<Uint8List>(
+      'captureScreenshotPortal',
+      {'interactive': interactive},
+    );
+    if (bytes == null) {
+      throw PlatformException(
+        code: 'capture_failed',
+        message: 'Empty response',
+      );
+    }
+    return bytes;
+  }
+
   Future<List<WindowInfo>> listWindows() async {
     try {
       final list =
@@ -169,6 +282,10 @@ class NativeBridge {
       return const [];
     }
   }
+
+  /// Linux only: hides the window outside of any GTK draw (window_manager's
+  /// hide can run in the middle of one on Wayland and crash, see native).
+  Future<void> hideWindow() => _channel.invokeMethod('hideWindow');
 
   Future<void> enterOverlay(int displayId) =>
       _channel.invokeMethod('enterOverlay', {'displayId': displayId});
@@ -196,8 +313,16 @@ class NativeBridge {
   Future<bool> hasScreenAccess() async =>
       await _channel.invokeMethod<bool>('hasScreenAccess') ?? true;
 
-  Future<bool> requestScreenAccess() async =>
-      await _channel.invokeMethod<bool>('requestScreenAccess') ?? true;
+  /// Asks for screen capture access. macOS: shows the system prompt (the
+  /// grant only applies after a restart). Linux/Wayland: shows GNOME's
+  /// one-time screenshot access dialog — only possible while our window is
+  /// focused — and resolves once the user answered; [reset] first forgets an
+  /// earlier "deny", which the portal would otherwise apply silently forever.
+  Future<bool> requestScreenAccess({bool reset = false}) async =>
+      await _channel.invokeMethod<bool>('requestScreenAccess', {
+        'reset': reset,
+      }) ??
+      true;
 
   Future<void> openScreenAccessSettings() =>
       _channel.invokeMethod('openScreenAccessSettings');

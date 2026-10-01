@@ -352,6 +352,22 @@ class DebugCommandServer {
           return 'visible=${await windowManager.isVisible()}';
         case 'stage':
           return 'stage=${flow.stage.name} session=${flow.session != null} document=${flow.document != null}';
+        case 'hotkeys':
+          final hotkeys = services.hotkeys;
+          return 'portal=${hotkeys.usesPortal} '
+              '${CaptureMode.values.map((m) => '${m.name}=${hotkeys.labelFor(m)}').join(' ')} '
+              'failed=${hotkeys.failed.map((m) => m.name).join(',')}';
+        case 'configureshortcuts':
+          return 'opened=${await services.hotkeys.configureInSystem()}';
+        case 'rebind':
+          await services.hotkeys.debugRebind();
+          return 'ok';
+        case 'winfo':
+          return 'bounds=${await windowManager.getBounds()} '
+              'visible=${await windowManager.isVisible()} '
+              'fullScreen=${await windowManager.isFullScreen()} '
+              'maximized=${await windowManager.isMaximized()} '
+              'focused=${await windowManager.isFocused()}';
         case 'quit':
           await flow.quit();
           return 'bye';

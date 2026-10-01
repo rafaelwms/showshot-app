@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui' show Brightness, PlatformDispatcher, Size;
 
@@ -14,6 +15,7 @@ import 'settings_service.dart';
 class TrayService {
   TrayService({
     required this.settings,
+    required this.hotkeys,
     required this.onCapture,
     required this.onOpen,
     required this.onSettings,
@@ -21,6 +23,10 @@ class TrayService {
   });
 
   final SettingsService settings;
+
+  /// Shortcut labels next to the capture items (on Wayland the desktop picks
+  /// the keys, so they can change without a settings change).
+  final HotkeyService hotkeys;
   final void Function(CaptureMode mode) onCapture;
   final VoidCallback onOpen;
   final VoidCallback onSettings;
@@ -60,14 +66,24 @@ class TrayService {
       // Left click runs the action chosen in Settings
       // (`AppSettings.trayLeftClick`, area capture by default); right click
       // opens the menu on macOS and Windows alike. Linux panels handle
-      // clicks (and show the menu) themselves.
-      icon.setContextMenuTrigger(tray.ContextMenuTrigger.rightClicked);
+      // clicks (and show the menu) themselves: the StatusNotifierItem gets no
+      // click events through to us (nativeapi's Activate/ContextMenu are
+      // no-ops), and it only publishes the menu with the `clicked` trigger —
+      // with `rightClicked` the icon had no menu at all.
+      icon.setContextMenuTrigger(
+        Platform.isLinux
+            ? tray.ContextMenuTrigger.clicked
+            : tray.ContextMenuTrigger.rightClicked,
+      );
       icon.addListener((event) {
-        if (event is tray.TrayIconClickedEvent) _onLeftClick(icon);
+        if (event is tray.TrayIconClickedEvent) {
+          _runOutsideCallback(() => _onLeftClick(icon));
+        }
       });
       rebuildMenu();
       icon.setVisible(true);
       settings.addListener(rebuildMenu);
+      hotkeys.addListener(rebuildMenu);
     } catch (error, stack) {
       debugPrint('Tray init failed: $error\n$stack');
     }
@@ -93,6 +109,14 @@ class TrayService {
         onCapture(action.mode!);
     }
   }
+
+  /// Tray events arrive through a synchronous native (FFI) callback. On
+  /// Linux, async work started right inside it stalls at its first `await`:
+  /// the continuation sits in the microtask queue until some *other* event
+  /// wakes the isolate — a tray "Area" click looked dead until the user
+  /// happened to open the window. Running the handler as a regular event
+  /// (a zero timer) gets its microtasks drained normally.
+  void _runOutsideCallback(VoidCallback action) => Timer.run(action);
 
   void _applyTrayIconForBrightness(tray.TrayIcon icon) {
     final dark =
@@ -121,14 +145,15 @@ class TrayService {
         tray.MenuItemType.normal,
       );
       menuItem?.addListener((event) {
-        if (event is tray.MenuItemClickedEvent) onClick();
+        if (event is tray.MenuItemClickedEvent) _runOutsideCallback(onClick);
       });
       return menuItem;
     }
 
     String withHotKey(String label, CaptureMode mode) {
-      final hotKey = hotKeys[mode];
-      return hotKey == null ? label : '$label   ${hotKeyLabel(hotKey)}';
+      if (hotKeys[mode] == null) return label;
+      final shortcut = hotkeys.labelFor(mode);
+      return shortcut == '—' ? label : '$label   $shortcut';
     }
 
     for (final mode in CaptureMode.values) {
@@ -147,6 +172,7 @@ class TrayService {
 
   void dispose() {
     settings.removeListener(rebuildMenu);
+    hotkeys.removeListener(rebuildMenu);
     if (!Platform.isMacOS) {
       PlatformDispatcher.instance.onPlatformBrightnessChanged = null;
     }

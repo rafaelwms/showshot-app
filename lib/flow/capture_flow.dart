@@ -3,7 +3,8 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show Clipboard, ClipboardData;
+import 'package:flutter/services.dart'
+    show Clipboard, ClipboardData, PlatformException;
 import 'package:window_manager/window_manager.dart';
 
 import '../models/app_settings.dart';
@@ -139,27 +140,41 @@ class CaptureFlow extends ChangeNotifier with WindowListener {
     _busy = true;
     _setStage(FlowStage.capturing);
     try {
-      final wasVisible = await windowManager.isVisible();
-      if (wasVisible) {
-        await windowManager.hide();
+      final info = await native.platformInfo();
+      if (info.needsScreenPermission && !await native.hasScreenAccess()) {
+        if (Platform.isLinux) {
+          // GNOME shows its one-time screenshot access dialog only for the
+          // *focused* app, so ask with our window up — before hiding it —
+          // and carry on with the capture once the user allowed it.
+          await showHome();
+          if (!await native.requestScreenAccess()) {
+            _permissionMissing = true;
+            _setStage(FlowStage.idle);
+            return;
+          }
+        } else {
+          // macOS: the grant only takes effect after a restart.
+          await native.requestScreenAccess();
+          _permissionMissing = true;
+          _setStage(FlowStage.idle);
+          await showHome();
+          return;
+        }
+      }
+      _permissionMissing = false;
+
+      if (await windowManager.isVisible()) {
+        await _hideWindow();
         // Give the compositor a moment to remove our window from the screen.
         await Future<void>.delayed(const Duration(milliseconds: 220));
       }
 
-      final info = await native.platformInfo();
-      if (info.needsScreenPermission && !await native.hasScreenAccess()) {
-        await native.requestScreenAccess();
-        _permissionMissing = true;
-        _setStage(FlowStage.idle);
-        await showHome();
-        return;
-      }
-      _permissionMissing = false;
-
       final session = await capture.captureUnderCursor(mode);
       _session = session;
 
-      if (mode == CaptureMode.fullScreen) {
+      // Nothing left to pick: the whole display, or a window the user
+      // already picked in the desktop's own screenshot UI (Wayland).
+      if (mode == CaptureMode.fullScreen || session.pickedByDesktop) {
         await _openEditor(session.image.clone(), session);
         return;
       }
@@ -170,9 +185,19 @@ class CaptureFlow extends ChangeNotifier with WindowListener {
       await native.enterOverlay(session.display.id);
       await windowManager.focus();
     } catch (error, stack) {
-      debugPrint('Capture failed: $error\n$stack');
       _session?.dispose();
       _session = null;
+      if (error is PlatformException && error.code == 'cancelled') {
+        // The user backed out of the desktop's screenshot UI: not a failure.
+        _setStage(FlowStage.idle);
+        if (_returnToHome) await showHome();
+        return;
+      }
+      debugPrint('Capture failed: $error\n$stack');
+      // Access revoked since we last checked (e.g. in GNOME Settings)?
+      final info = await native.platformInfo();
+      _permissionMissing =
+          info.needsScreenPermission && !await native.hasScreenAccess();
       _lastMessage = const FlowMessage(FlowMessageKind.captureFailed);
       _setStage(FlowStage.idle);
       await showHome();
@@ -187,53 +212,67 @@ class CaptureFlow extends ChangeNotifier with WindowListener {
     if (session == null || _stage != FlowStage.overlay) return;
     _busy = true;
     try {
+      final rect = result.rect ?? session.logicalRect;
+      final saveDirect =
+          result.action == OverlayAction.save &&
+          !settings.settings.askWhereToSave;
+
+      // Clipboard writes happen *before* hiding the overlay: Wayland only
+      // accepts them from the focused window, and drops them silently
+      // otherwise (harmless ordering everywhere else).
+      ui.Image? image;
+      FlowMessage? copyResult;
+      switch (result.action) {
+        case OverlayAction.copy:
+          image = await session.crop(rect);
+          copyResult = await export.copyToClipboard(image)
+              ? const FlowMessage(FlowMessageKind.copied)
+              : null;
+        case OverlayAction.extractText:
+          copyResult = await _extractText(await session.crop(rect));
+        case OverlayAction.save when saveDirect:
+          image = await session.crop(rect);
+          if (settings.settings.copyAfterSave) {
+            await export.copyToClipboard(image);
+          }
+        case OverlayAction.save || OverlayAction.edit || OverlayAction.cancel:
+          break;
+      }
+
       // Hide before restoring the window style so the user never sees the
       // overlay collapse into a regular window.
-      await windowManager.hide();
+      await _hideWindow();
       await _showBlank();
       final size = _editorWindowSize(session.image, session);
       await native.exitOverlay(width: size.width, height: size.height);
 
-      final rect = result.rect ?? session.logicalRect;
       switch (result.action) {
         case OverlayAction.cancel:
           _disposeSession();
           _setStage(FlowStage.idle);
           await _finish();
         case OverlayAction.edit:
-          final image = await session.crop(rect);
-          await _openEditor(image, session);
-        case OverlayAction.copy:
-          final image = await session.crop(rect);
-          final ok = await export.copyToClipboard(image);
-          image.dispose();
+          await _openEditor(await session.crop(rect), session);
+        case OverlayAction.copy || OverlayAction.extractText:
+          image?.dispose();
           _disposeSession();
-          if (ok) {
-            await _report(const FlowMessage(FlowMessageKind.copied));
+          if (copyResult != null) {
+            await _report(copyResult);
           } else {
             _lastMessage = null;
           }
           _setStage(FlowStage.idle);
           await _finish();
-        case OverlayAction.extractText:
-          final image = await session.crop(rect);
-          await _extractText(image);
+        case OverlayAction.save when saveDirect:
+          await _saveDirect(image!, copied: true);
+          image.dispose();
           _disposeSession();
           _setStage(FlowStage.idle);
           await _finish();
         case OverlayAction.save:
-          final image = await session.crop(rect);
-          if (settings.settings.askWhereToSave) {
-            // The dialog needs a visible parent window: open the editor and
-            // let it trigger the save panel.
-            await _openEditor(image, session, autoSave: true);
-          } else {
-            await _saveDirect(image);
-            image.dispose();
-            _disposeSession();
-            _setStage(FlowStage.idle);
-            await _finish();
-          }
+          // The dialog needs a visible parent window: open the editor and
+          // let it trigger the save panel.
+          await _openEditor(await session.crop(rect), session, autoSave: true);
       }
     } catch (error, stack) {
       debugPrint('Overlay completion failed: $error\n$stack');
@@ -247,36 +286,38 @@ class CaptureFlow extends ChangeNotifier with WindowListener {
     }
   }
 
-  Future<void> _saveDirect(ui.Image image) async {
+  /// [copied]: the caller already handled "copy after save" (it has to
+  /// happen while a window is focused, see [completeOverlay]).
+  Future<void> _saveDirect(ui.Image image, {bool copied = false}) async {
     final path = await export.save(image, settings.settings);
     if (path == null) {
       await _report(const FlowMessage(FlowMessageKind.saveFailed));
       return;
     }
     await settings.addRecentFile(path);
-    if (settings.settings.copyAfterSave) await export.copyToClipboard(image);
+    if (!copied && settings.settings.copyAfterSave) {
+      await export.copyToClipboard(image);
+    }
     await _report(FlowMessage(FlowMessageKind.saved, path: path));
   }
 
   /// Recognizes text in [image] and copies it to the clipboard. Disposes
-  /// [image]; sets [lastMessage] to report the outcome either way.
-  Future<void> _extractText(ui.Image image) async {
+  /// [image]; returns the outcome for the caller to report.
+  Future<FlowMessage> _extractText(ui.Image image) async {
     final png = await ExportService.encodePng(image);
     image.dispose();
     final text = await ocr.recognize(png);
-    if (text == null) {
-      await _report(const FlowMessage(FlowMessageKind.noTextFound));
-      return;
-    }
+    if (text == null) return const FlowMessage(FlowMessageKind.noTextFound);
     await Clipboard.setData(ClipboardData(text: text));
-    await _report(const FlowMessage(FlowMessageKind.textCopied));
+    return const FlowMessage(FlowMessageKind.textCopied);
   }
 
   /// Called by the editor once the user copied/saved/discarded.
   Future<void> closeEditor({FlowMessage? message}) async {
     if (_stage != FlowStage.editor) return;
     await _leaveEditorWindowMode();
-    await windowManager.hide();
+    await _hideWindow();
+    await _restoreHiddenWindowFrame();
     await _showBlank();
     _document?.image.dispose();
     _document = null;
@@ -299,6 +340,9 @@ class CaptureFlow extends ChangeNotifier with WindowListener {
       await _settle();
     }
     if (!await windowManager.isVisible()) {
+      // The editor may have left the window maximized (GNOME auto-maximizes
+      // windows created close to the screen size).
+      if (await windowManager.isMaximized()) await windowManager.unmaximize();
       await windowManager.setSize(homeSize);
       await windowManager.center();
     }
@@ -310,9 +354,22 @@ class CaptureFlow extends ChangeNotifier with WindowListener {
 
   Future<void> openSettings() => showHome(route: '/settings');
 
+  /// The permission banner's "request" button. On Linux the answer applies
+  /// right away (no restart), so the banner can go as soon as it's granted.
+  Future<void> requestScreenAccess() async {
+    if (!Platform.isLinux) {
+      await native.requestScreenAccess();
+      return;
+    }
+    if (await native.requestScreenAccess(reset: true)) {
+      _permissionMissing = false;
+      notifyListeners();
+    }
+  }
+
   Future<void> hideWindow() async {
     if (_stage == FlowStage.overlay) return;
-    await windowManager.hide();
+    await _hideWindow();
     _returnToHome = false;
   }
 
@@ -377,6 +434,13 @@ class CaptureFlow extends ChangeNotifier with WindowListener {
   /// Undoes [_openEditor]'s maximize / full screen so the window goes back to
   /// a normal frame (Home and the overlay size it themselves).
   Future<void> _leaveEditorWindowMode() async {
+    // Linux (GTK3 on Wayland): leaving full screen / maximized on a *visible*
+    // window is a compositor round trip that queues a redraw, and hiding the
+    // window right after makes GTK draw on its already-destroyed surface — a
+    // segfault in libwayland-client. Done on the hidden window instead, it's
+    // a purely local state change, so [closeEditor] calls
+    // [_restoreHiddenWindowFrame] after hiding.
+    if (Platform.isLinux) return;
     if (await windowManager.isFullScreen()) {
       // macOS animates the exit, and hiding the window mid-animation gets
       // undone when it finishes: wait for the real "left full screen" event.
@@ -384,6 +448,20 @@ class CaptureFlow extends ChangeNotifier with WindowListener {
       await windowManager.setFullScreen(false);
       await left.future.timeout(const Duration(seconds: 3), onTimeout: () {});
       _leftFullScreen = null;
+    }
+    if (await windowManager.isMaximized()) await windowManager.unmaximize();
+  }
+
+  /// Linux hides through the native side, never in the middle of a GTK draw
+  /// (window_manager's hide can land inside one on Wayland and crash).
+  Future<void> _hideWindow() =>
+      Platform.isLinux ? native.hideWindow() : windowManager.hide();
+
+  /// Linux counterpart of [_leaveEditorWindowMode], for a hidden window.
+  Future<void> _restoreHiddenWindowFrame() async {
+    if (!Platform.isLinux) return;
+    if (await windowManager.isFullScreen()) {
+      await windowManager.setFullScreen(false);
     }
     if (await windowManager.isMaximized()) await windowManager.unmaximize();
   }

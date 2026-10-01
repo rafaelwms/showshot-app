@@ -39,9 +39,14 @@ Future<void> main(List<String> args) async {
     ocr: ocr,
     notifications: NotificationService(settings: settings, native: native),
   );
-  final hotkeys = HotkeyService(settings: settings, onTrigger: flow.start);
+  final hotkeys = HotkeyService(
+    settings: settings,
+    native: native,
+    onTrigger: flow.start,
+  );
   final tray = TrayService(
     settings: settings,
+    hotkeys: hotkeys,
     onCapture: flow.start,
     onOpen: flow.showHome,
     onSettings: flow.openSettings,
@@ -65,12 +70,16 @@ Future<void> main(List<String> args) async {
   DebugHooks.launchSummary =
       'atLogin=${launch.atLogin} args=$args startHidden=$startHidden';
 
-  const options = WindowOptions(
+  final options = WindowOptions(
     size: CaptureFlow.homeSize,
     minimumSize: CaptureFlow.minSize,
     center: true,
     title: 'Show Shot',
-    titleBarStyle: TitleBarStyle.hidden,
+    // Linux keeps GTK's client-side decorations — they draw the rounded
+    // frame and shadow — with an invisible GTK titlebar set natively.
+    titleBarStyle: Platform.isLinux
+        ? TitleBarStyle.normal
+        : TitleBarStyle.hidden,
     backgroundColor: Colors.transparent,
   );
   await windowManager.waitUntilReadyToShow(options, () async {
@@ -99,6 +108,10 @@ Future<void> main(List<String> args) async {
   // macOS doesn't render frames for it, so waiting for one would leave the
   // app running with no tray icon and no shortcuts.
   await DebugCommandServer.start(services);
+  if (Platform.isLinux) {
+    await native.syncWindowRounded();
+    native.onAppReactivated = flow.showHome;
+  }
   await tray.init();
   await hotkeys.init();
   await startup.init();
@@ -108,7 +121,8 @@ Future<void> main(List<String> args) async {
       () => native.setDockIconVisible(settings.settings.showDockIcon),
     );
   }
-  if (Platform.isWindows) {
+  if (Platform.isWindows ||
+      (Platform.isLinux && !(await native.platformInfo()).isWayland)) {
     await windowManager.setSkipTaskbar(!settings.settings.showTaskbarIcon);
     settings.addListener(
       () => windowManager.setSkipTaskbar(!settings.settings.showTaskbarIcon),

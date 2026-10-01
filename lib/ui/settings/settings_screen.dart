@@ -192,7 +192,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                         ),
                                       ),
                                     ),
-                                  if (Platform.isWindows)
+                                  // Linux: X11 only — Wayland has no "skip
+                                  // taskbar" hint (and GNOME already shows
+                                  // no dock icon while the window is hidden).
+                                  if (Platform.isWindows ||
+                                      (Platform.isLinux &&
+                                          services
+                                                  .native
+                                                  .cachedPlatformInfo
+                                                  ?.isWayland ==
+                                              false))
                                     _SettingRow(
                                       title: strings.showTaskbarIcon,
                                       subtitle: strings.showTaskbarIconHint,
@@ -252,47 +261,78 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               ),
                               _Section(
                                 title: strings.sectionShortcuts,
-                                footer: strings.shortcutsHint,
+                                footer: services.hotkeys.usesPortal
+                                    ? strings.shortcutsHintPortal
+                                    : strings.shortcutsHint,
                                 children: [
                                   for (final mode in CaptureMode.values)
                                     _SettingRow(
                                       title: strings.modeName(mode),
                                       subtitle: strings.modeDescription(mode),
-                                      trailing: HotkeyField(
-                                        value: settings.hotKeys[mode],
-                                        identifier: 'shoshot.${mode.name}',
-                                        failed: services.hotkeys.failed
-                                            .contains(mode),
-                                        onRecordingChanged: _onRecordingChanged,
-                                        onChanged: (hotKey) => update(
+                                      // Wayland: the desktop owns the keys,
+                                      // so show what it bound, read-only.
+                                      trailing: services.hotkeys.usesPortal
+                                          ? KeyCap(
+                                              services.hotkeys.labelFor(mode),
+                                            )
+                                          : HotkeyField(
+                                              value: settings.hotKeys[mode],
+                                              identifier:
+                                                  'shoshot.${mode.name}',
+                                              failed: services.hotkeys.failed
+                                                  .contains(mode),
+                                              onRecordingChanged:
+                                                  _onRecordingChanged,
+                                              onChanged: (hotKey) => update(
+                                                (s) => s.copyWith(
+                                                  hotKeys: {
+                                                    ...s.hotKeys,
+                                                    mode: hotKey,
+                                                  },
+                                                ),
+                                              ),
+                                            ),
+                                    ),
+                                  if (services.hotkeys.usesPortal)
+                                    Align(
+                                      alignment: Alignment.centerRight,
+                                      child: TextButton.icon(
+                                        onPressed:
+                                            services.hotkeys.configureInSystem,
+                                        icon: const Icon(
+                                          Icons.open_in_new_rounded,
+                                          size: 16,
+                                        ),
+                                        label: Text(
+                                          strings.shortcutsChangeInSystem,
+                                        ),
+                                        style: TextButton.styleFrom(
+                                          foregroundColor:
+                                              context.palette.textMuted,
+                                        ),
+                                      ),
+                                    )
+                                  else
+                                    Align(
+                                      alignment: Alignment.centerRight,
+                                      child: TextButton.icon(
+                                        onPressed: () => update(
                                           (s) => s.copyWith(
-                                            hotKeys: {
-                                              ...s.hotKeys,
-                                              mode: hotKey,
-                                            },
+                                            hotKeys:
+                                                AppSettings.defaultHotKeys(),
                                           ),
                                         ),
-                                      ),
-                                    ),
-                                  Align(
-                                    alignment: Alignment.centerRight,
-                                    child: TextButton.icon(
-                                      onPressed: () => update(
-                                        (s) => s.copyWith(
-                                          hotKeys: AppSettings.defaultHotKeys(),
+                                        icon: const Icon(
+                                          Icons.restart_alt_rounded,
+                                          size: 16,
+                                        ),
+                                        label: Text(strings.resetDefaults),
+                                        style: TextButton.styleFrom(
+                                          foregroundColor:
+                                              context.palette.textMuted,
                                         ),
                                       ),
-                                      icon: const Icon(
-                                        Icons.restart_alt_rounded,
-                                        size: 16,
-                                      ),
-                                      label: Text(strings.resetDefaults),
-                                      style: TextButton.styleFrom(
-                                        foregroundColor:
-                                            context.palette.textMuted,
-                                      ),
                                     ),
-                                  ),
                                 ],
                               ),
                               _Section(
