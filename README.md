@@ -150,6 +150,22 @@ linux/packaging/install-local.sh            # último build release
 linux/packaging/install-local.sh --uninstall
 ```
 
+Pacote `.deb` (o que vai anexado na Release do GitHub), para a arquitetura da máquina
+(amd64 ou arm64 — o Flutter não faz cross-compile, então o arm64 é gerado numa máquina
+arm64):
+
+```bash
+sudo apt-get install dpkg-dev patchelf lintian   # uma vez
+linux/packaging/build-deb.sh                     # → build/deb/showshot_<versão>_<arch>.deb + .sha256
+lintian build/deb/*.deb                          # deve sair limpo
+sudo apt install ./build/deb/showshot_*_amd64.deb
+```
+
+Quem já usou o `install-local.sh` deve rodar `linux/packaging/install-local.sh --uninstall`
+antes de instalar o pacote **e sair/entrar na sessão**: o GNOME Shell guarda em memória a
+entrada antiga (mesmo id `com.rafaelwms.showshot`) e continua tentando abrir o caminho de
+`~/.local` até o próximo login.
+
 **Wayland (GNOME):** tudo passa pelos portais do sistema (`xdg-desktop-portal`):
 
 - **Captura:** portal Screenshot. Na primeira captura o GNOME pede uma autorização única

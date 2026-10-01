@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- AppStream metadata: what software centers (GNOME Software, the Ubuntu
+     App Center) show for the installed package. -->
+<component type="desktop-application">
+  <id>com.rafaelwms.showshot</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>LicenseRef-proprietary</project_license>
+  <name>Show Shot</name>
+  <summary>Capture, annotate and share screenshots</summary>
+  <summary xml:lang="pt-BR">Capture, anote e compartilhe capturas de tela</summary>
+  <developer id="com.rafaelwms">
+    <name>Rafael WMS</name>
+  </developer>
+  <description>
+    <p>
+      Show Shot lives in the top bar and captures an area, a window, the whole
+      screen or the text in a region (OCR), then lets you annotate it — arrows,
+      shapes, text, numbered steps, blur — and copy or save the result.
+    </p>
+    <p xml:lang="pt-BR">
+      O Show Shot fica na barra superior e captura uma área, uma janela, a tela
+      inteira ou o texto de uma região (OCR); depois você anota — setas, formas,
+      texto, passos numerados, desfoque — e copia ou salva o resultado.
+    </p>
+  </description>
+  <launchable type="desktop-id">com.rafaelwms.showshot.desktop</launchable>
+  <url type="homepage">https://showshot.rafaelwms.com</url>
+  <categories>
+    <category>Graphics</category>
+  </categories>
+  <keywords>
+    <keyword>screenshot</keyword>
+    <keyword>capture</keyword>
+    <keyword>annotate</keyword>
+    <keyword>OCR</keyword>
+  </keywords>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="1.2.0" date="2026-10-01"/>
+  </releases>
+</component>
