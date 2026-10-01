@@ -108,4 +108,10 @@ Future<void> main(List<String> args) async {
       () => native.setDockIconVisible(settings.settings.showDockIcon),
     );
   }
+  if (Platform.isWindows) {
+    await windowManager.setSkipTaskbar(!settings.settings.showTaskbarIcon);
+    settings.addListener(
+      () => windowManager.setSkipTaskbar(!settings.settings.showTaskbarIcon),
+    );
+  }
 }

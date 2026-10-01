@@ -38,6 +38,9 @@ class ShoShotNative {
                          const std::vector<uint8_t>& rgba, int width,
                          int height);
   int64_t CurrentAccentArgb();
+  void RecognizeText(
+      std::vector<uint8_t> png,
+      std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
   bool ShowNotification(const std::string& title, const std::string& body);
 
  public:

@@ -1,5 +1,9 @@
 flutter/ephemeral/
 
+# C++/WinRT projection headers generated at configure time (see
+# runner/CMakeLists.txt) for OCR — SDK-derived, not project source.
+runner/cppwinrt_generated/
+
 # Visual Studio user-specific files.
 *.suo
 *.user
