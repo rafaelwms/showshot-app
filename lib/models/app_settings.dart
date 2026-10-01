@@ -38,6 +38,7 @@ class AppSettings {
     required this.hotKeys,
     this.launchAtStartup = false,
     this.showDockIcon = false,
+    this.showTaskbarIcon = true,
     this.saveFormat = ImageFormat.png,
     this.jpgQuality = 90,
     this.saveDirectory,
@@ -56,6 +57,7 @@ class AppSettings {
   final Map<CaptureMode, HotKey?> hotKeys;
   final bool launchAtStartup;
   final bool showDockIcon;
+  final bool showTaskbarIcon;
   final ImageFormat saveFormat;
   final int jpgQuality;
   final String? saveDirectory;
@@ -107,6 +109,7 @@ class AppSettings {
     Map<CaptureMode, HotKey?>? hotKeys,
     bool? launchAtStartup,
     bool? showDockIcon,
+    bool? showTaskbarIcon,
     ImageFormat? saveFormat,
     int? jpgQuality,
     String? saveDirectory,
@@ -126,6 +129,7 @@ class AppSettings {
       hotKeys: hotKeys ?? this.hotKeys,
       launchAtStartup: launchAtStartup ?? this.launchAtStartup,
       showDockIcon: showDockIcon ?? this.showDockIcon,
+      showTaskbarIcon: showTaskbarIcon ?? this.showTaskbarIcon,
       saveFormat: saveFormat ?? this.saveFormat,
       jpgQuality: jpgQuality ?? this.jpgQuality,
       saveDirectory: clearSaveDirectory
@@ -153,6 +157,7 @@ class AppSettings {
     },
     'launchAtStartup': launchAtStartup,
     'showDockIcon': showDockIcon,
+    'showTaskbarIcon': showTaskbarIcon,
     'saveFormat': saveFormat.name,
     'jpgQuality': jpgQuality,
     'saveDirectory': saveDirectory,
@@ -186,6 +191,7 @@ class AppSettings {
       hotKeys: hotKeys,
       launchAtStartup: json['launchAtStartup'] as bool? ?? false,
       showDockIcon: json['showDockIcon'] as bool? ?? false,
+      showTaskbarIcon: json['showTaskbarIcon'] as bool? ?? true,
       saveFormat: ImageFormat.values.byNameOr(
         json['saveFormat'],
         ImageFormat.png,

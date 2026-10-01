@@ -12,7 +12,32 @@ seção "Windows Store distribution (MSIX)" em [CLAUDE.md](CLAUDE.md).
 - **Pacotes enviados (2026-09-22)**: `showshot_x64.msix` (v1.0.0.0) e `showshot_arm64.msix`
   (v1.0.0.0), ambos em Windows 10/11 Desktop, `Windows.Desktop` min version `10.0.17763.0`
 - **Pendente**: Listagem da Store (descrição/screenshots/categoria), Classificações
-  etárias, política de privacidade publicada numa URL pública
+  etárias, política de privacidade publicada numa URL pública. (Este arquivo só reflete o
+  que está no repositório — o estado real dessas etapas no Partner Center é com você.)
+
+### Versão: o código já está à frente do que foi enviado
+
+O app está em **1.2.0+2** (`pubspec.yaml`), mas `msix_version` continua `1.0.0.0`, que é o
+que está nos pacotes enviados. Antes de submeter de novo:
+
+1. Subir `msix_version` para `1.2.0.0`. A Store reserva o último dígito (revisão) e exige
+   que ele seja `0`, e cada novo envio precisa ter versão maior que a anterior.
+2. Regerar **os dois pacotes** com a mesma versão. Os comandos estão em
+   [CLAUDE.md](CLAUDE.md), seção "Windows Store distribution (MSIX)": x64 na máquina x64
+   (`dart run msix:create`) e ARM64 na máquina ARM64 (`dart run msix:create --architecture=arm64`).
+3. Se a 1.0.0.0 nunca chegou a ser certificada, dá pra simplesmente substituir os pacotes
+   da submissão em andamento, em vez de abrir uma nova.
+
+### Assets que já existem no repositório (`artwork/`)
+
+| Arquivo | Tamanho | Uso provável na Store |
+| --- | --- | --- |
+| `Banner_Microsoft.png` | 1440×2160 (2:3) | Arte de pôster da listagem |
+| `icon_300.png` | 300×300 | Logo do app na listagem |
+| `Documento.png` | 2880×1800 (16:10) | Candidata a screenshot |
+
+Confira no Partner Center os tamanhos aceitos antes de enviar; os usos acima são a
+correspondência pelo tamanho, não algo que foi validado lá.
 
 ## Listagem da Store
 
@@ -40,18 +65,26 @@ Show Shot
 >
 > Depois de capturar, anote na hora: setas, retângulos, elipses, caneta livre,
 > marcador, texto, numeração de passos e desfoque — tudo com cor, espessura e
-> transparência ajustáveis, desfazer/refazer e zoom pra trabalhar em detalhes.
+> transparência ajustáveis, desfazer/refazer e zoom pra trabalhar em detalhes. Qualquer
+> marcação pode ser movida, redimensionada e girada depois de pronta, e a caneta e o
+> marcador têm um suavizador de curvas ajustável.
 >
 > Envie o resultado pra onde precisar: copiado direto na área de transferência ou
-> salvo em PNG/JPG, com atalho pra abrir a pasta ou repetir a última ação.
+> salvo em PNG/JPG. Uma notificação do sistema confirma o que aconteceu ("copiado",
+> "salvo", "texto copiado") sem tirar a janela do app da frente do seu trabalho.
 >
 > **Destaques**
 > • Captura de área, janela, tela inteira ou texto (OCR on-device, sem enviar nada
 >   pra nuvem)
 > • Atalhos globais configuráveis — funciona mesmo com o app em segundo plano
-> • Editor completo de anotações com desfazer/refazer e zoom
+> • Editor completo de anotações: mover, redimensionar e girar marcações, suavizador
+>   de curvas, desfazer/refazer e zoom
 > • Copiar para a área de transferência ou salvar em PNG/JPG
-> • Inicia com o Windows e vive discretamente na bandeja do sistema
+> • Notificações do sistema para copiado/salvo/texto copiado (podem ser desligadas)
+> • Inicia com o Windows, abre discretamente só na bandeja e pode ficar fora da barra
+>   de tarefas, se você preferir
+> • Ação do clique no ícone da bandeja configurável
+> • Janela do editor configurável: maximizada, ou no tamanho da captura
 > • Tema claro/escuro e cor de destaque seguem automaticamente as configurações do
 >   Windows
 > • Português e inglês, com detecção automática de idioma
@@ -71,18 +104,26 @@ Show Shot
 >
 > Once captured, annotate right away: arrows, rectangles, ellipses, freehand pen,
 > highlighter, text, step numbering and blur — all with adjustable color, stroke width
-> and opacity, undo/redo, and zoom for fine detail work.
+> and opacity, undo/redo, and zoom for fine detail work. Any mark can be moved,
+> resized and rotated after you draw it, and the pen and highlighter have an
+> adjustable curve smoother.
 >
 > Send the result wherever you need it: copied straight to the clipboard, or saved as
-> PNG/JPG, with a shortcut to open the folder or repeat the last action.
+> PNG/JPG. A system notification confirms what happened ("copied", "saved", "text
+> copied") without pulling the app window in front of your work.
 >
 > **Highlights**
 > • Area, window, full-screen or text (on-device OCR, nothing sent to the cloud)
 >   capture
 > • Configurable global hotkeys — works even while the app is in the background
-> • Full annotation editor with undo/redo and zoom
+> • Full annotation editor: move, resize and rotate marks, curve smoother,
+>   undo/redo and zoom
 > • Copy to clipboard or save as PNG/JPG
-> • Starts with Windows and lives quietly in the system tray
+> • System notifications for copied/saved/text copied (can be turned off)
+> • Starts with Windows, opens quietly in the tray only, and can stay out of the
+>   taskbar if you prefer
+> • Configurable tray icon click action
+> • Configurable editor window: maximized, or sized to the capture
 > • Light/dark theme and accent color follow your Windows settings automatically
 > • Portuguese and English, with automatic language detection
 >
@@ -134,7 +175,7 @@ issue fixada no repositório, contanto que a URL seja estável).
 
 ### Política de Privacidade — Show Shot
 
-*Última atualização: 22 de setembro de 2026*
+*Última atualização: 30 de setembro de 2026*
 
 O Show Shot é um aplicativo de captura e anotação de tela desenvolvido por Rafael
 WMS. Esta política descreve, de forma direta, como o aplicativo lida com dados.
@@ -160,8 +201,13 @@ Tudo o que o aplicativo faz acontece localmente, no seu próprio computador.
   PNG ou JPG na pasta que você escolher (ou na pasta padrão configurada nas
   preferências do aplicativo). O Show Shot não acessa nenhum outro arquivo do seu
   computador além dos que você salva por essa função.
+- **Notificações do sistema**: ao copiar, salvar ou reconhecer texto, o aplicativo
+  pode exibir uma notificação local do sistema operacional confirmando o resultado
+  (por exemplo, "Texto copiado"). Elas são geradas no próprio dispositivo, não passam
+  por nenhum servidor e podem ser desligadas nas configurações do aplicativo.
 - **Preferências do aplicativo**: configurações como idioma, atalhos de teclado,
-  formato de imagem preferido e a lista de capturas recentes ficam guardadas
+  formato de imagem preferido, janela do editor, ícone na barra de tarefas e a lista de
+  capturas recentes ficam guardadas
   localmente no seu dispositivo (usando o mecanismo de preferências do próprio
   sistema operacional). Essas informações nunca saem do seu computador.
 - **Aparência do sistema**: o aplicativo lê o tema (claro/escuro) e a cor de destaque
@@ -205,16 +251,20 @@ Dúvidas sobre esta política podem ser enviadas para: rafael.wms@live.com
 
 ---
 
-## Notas de release (v1.0.0)
+## Notas de release (v1.2.0)
 
-Sugestão de texto pra primeira versão publicada na Store:
+Sugestão de texto pra primeira versão publicada na Store, já considerando a versão
+atual do app (1.2.0). Se a 1.0.0.0 chegar a ser publicada antes, esta vira "novidades".
 
 **PT-BR:**
 > Primeira versão do Show Shot na Microsoft Store! Captura de área, janela, tela
-> inteira e texto (OCR), editor completo de anotações, atalhos globais
-> configuráveis, e suporte nativo a x64 e ARM64.
+> inteira e texto (OCR), editor completo de anotações (mover, redimensionar e girar
+> marcações, suavizador de curvas), atalhos globais configuráveis, notificações do
+> sistema, opção de ficar só na bandeja (sem ícone na barra de tarefas) e suporte
+> nativo a x64 e ARM64.
 
 **EN-US:**
 > First release of Show Shot on the Microsoft Store! Area, window, full-screen and
-> text (OCR) capture, a full annotation editor, configurable global hotkeys, and
-> native x64 and ARM64 support.
+> text (OCR) capture, a full annotation editor (move, resize and rotate marks, curve
+> smoother), configurable global hotkeys, system notifications, an option to live in
+> the tray only (no taskbar icon), and native x64 and ARM64 support.

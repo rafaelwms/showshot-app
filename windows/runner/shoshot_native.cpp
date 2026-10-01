@@ -538,7 +538,11 @@ void ShoShotNative::EnterOverlay(int64_t display_id) {
                monitor->rect.bottom - monitor->rect.top,
                SWP_FRAMECHANGED | SWP_SHOWWINDOW);
   SetForegroundWindow(hwnd_);
-  SetFocus(hwnd_);
+  // Keyboard focus must go to the Flutter view (the runner window's child),
+  // not the runner window itself — otherwise key events (Esc, Enter, arrows…)
+  // never reach Flutter while the overlay is up.
+  HWND flutter_view = GetWindow(hwnd_, GW_CHILD);
+  SetFocus(flutter_view ? flutter_view : hwnd_);
 }
 
 void ShoShotNative::ExitOverlay(double logical_width, double logical_height) {
@@ -549,7 +553,13 @@ void ShoShotNative::ExitOverlay(double logical_width, double logical_height) {
   const MonitorEntry* monitor =
       FindMonitor(monitors, reinterpret_cast<int64_t>(overlay_monitor_));
 
-  SetWindowLongPtrW(hwnd_, GWL_STYLE, saved_style_ | WS_VISIBLE);
+  // Preserve visibility: CaptureFlow hides the window before calling this,
+  // and flows that end silently (copy, save, text → notification) must not
+  // pop the window back up. Flows that need it (editor, Home) show it after.
+  const bool was_visible = IsWindowVisible(hwnd_) != FALSE;
+  const LONG_PTR style = was_visible ? (saved_style_ | WS_VISIBLE)
+                                     : (saved_style_ & ~(LONG_PTR)WS_VISIBLE);
+  SetWindowLongPtrW(hwnd_, GWL_STYLE, style);
   SetWindowLongPtrW(hwnd_, GWL_EXSTYLE, saved_exstyle_);
 
   RECT work = monitor ? monitor->work : RECT{0, 0, 1920, 1080};
@@ -561,7 +571,8 @@ void ShoShotNative::ExitOverlay(double logical_width, double logical_height) {
   int x = work.left + (work_w - w) / 2;
   int y = work.top + (work_h - h) / 2;
   SetWindowPos(hwnd_, HWND_NOTOPMOST, x, y, w, h,
-               SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+               SWP_FRAMECHANGED | SWP_NOACTIVATE |
+                   (was_visible ? SWP_SHOWWINDOW : 0));
 }
 
 bool ShoShotNative::SetClipboardImage(const std::vector<uint8_t>& png,

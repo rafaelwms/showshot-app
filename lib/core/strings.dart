@@ -122,6 +122,8 @@ abstract class Strings {
   String get launchAtStartupHint;
   String get showDockIcon;
   String get showDockIconHint;
+  String get showTaskbarIcon;
+  String get showTaskbarIconHint;
   String get language;
   String get languageSystem;
   String get languagePortuguese;
@@ -350,6 +352,11 @@ class _Pt extends Strings {
   @override
   String get showDockIconHint =>
       'Por padrão o Show Shot vive apenas na barra de menu.';
+  @override
+  String get showTaskbarIcon => 'Mostrar ícone na Barra de tarefas';
+  @override
+  String get showTaskbarIconHint =>
+      'Desligado, o Show Shot vive apenas na bandeja do sistema.';
   @override
   String get language => 'Idioma';
   @override
@@ -622,6 +629,11 @@ class _En extends Strings {
   @override
   String get showDockIconHint =>
       'By default Show Shot lives only in the menu bar.';
+  @override
+  String get showTaskbarIcon => 'Show taskbar icon';
+  @override
+  String get showTaskbarIconHint =>
+      'When off, Show Shot lives only in the system tray.';
   @override
   String get language => 'Language';
   @override

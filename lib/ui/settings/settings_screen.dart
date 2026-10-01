@@ -192,6 +192,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                         ),
                                       ),
                                     ),
+                                  if (Platform.isWindows)
+                                    _SettingRow(
+                                      title: strings.showTaskbarIcon,
+                                      subtitle: strings.showTaskbarIconHint,
+                                      trailing: Switch(
+                                        value: settings.showTaskbarIcon,
+                                        onChanged: (v) => update(
+                                          (s) => s.copyWith(showTaskbarIcon: v),
+                                        ),
+                                      ),
+                                    ),
                                   _SettingRow(
                                     title: strings.language,
                                     trailing: _Dropdown<AppLanguage>(
