@@ -360,10 +360,13 @@ class _Pt extends Strings {
   String get showDockIconHint =>
       'Por padrão o Show Shot vive apenas na barra de menu.';
   @override
-  String get showTaskbarIcon => 'Mostrar ícone na Barra de tarefas';
+  String get showTaskbarIcon => Platform.isLinux
+      ? 'Mostrar ícone no Dock'
+      : 'Mostrar ícone na Barra de tarefas';
   @override
-  String get showTaskbarIconHint =>
-      'Desligado, o Show Shot vive apenas na bandeja do sistema.';
+  String get showTaskbarIconHint => Platform.isLinux
+      ? 'Desligado, o Show Shot vive apenas na barra superior.'
+      : 'Desligado, o Show Shot vive apenas na bandeja do sistema.';
   @override
   String get language => 'Idioma';
   @override
@@ -648,10 +651,12 @@ class _En extends Strings {
   String get showDockIconHint =>
       'By default Show Shot lives only in the menu bar.';
   @override
-  String get showTaskbarIcon => 'Show taskbar icon';
+  String get showTaskbarIcon =>
+      Platform.isLinux ? 'Show Dock icon' : 'Show taskbar icon';
   @override
-  String get showTaskbarIconHint =>
-      'When off, Show Shot lives only in the system tray.';
+  String get showTaskbarIconHint => Platform.isLinux
+      ? 'When off, Show Shot lives only in the top bar.'
+      : 'When off, Show Shot lives only in the system tray.';
   @override
   String get language => 'Language';
   @override

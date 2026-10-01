@@ -27,6 +27,7 @@ struct NativeState {
   FlMethodChannel* channel = nullptr;
   bool overlay = false;
   int overlay_monitor = 0;
+  gboolean saved_skip_taskbar = FALSE;
 
   // System accent color, read once via the desktop portal and then kept in
   // sync by subscribing to its change signal (works under both X11 and
@@ -441,6 +442,11 @@ void EnterOverlay(NativeState* state, int64_t display_id) {
   auto monitors = EnumerateMonitors();
   const MonitorEntry* m = FindMonitor(monitors, display_id);
   if (!m) return;
+  if (!state->overlay) {
+    // "Show Dock icon" off (X11) sets this too; put it back on exit.
+    state->saved_skip_taskbar =
+        gtk_window_get_skip_taskbar_hint(state->window);
+  }
   state->overlay = true;
   state->overlay_monitor = m->index;
   gtk_widget_show(GTK_WIDGET(state->window));
@@ -465,7 +471,7 @@ void ExitOverlay(NativeState* state, double width, double height) {
   // GNOME auto-maximized) would otherwise return to that state.
   gtk_window_unmaximize(state->window);
   gtk_window_set_keep_above(state->window, FALSE);
-  gtk_window_set_skip_taskbar_hint(state->window, FALSE);
+  gtk_window_set_skip_taskbar_hint(state->window, state->saved_skip_taskbar);
   int w = (int)width;
   int h = (int)height;
   if (m) {

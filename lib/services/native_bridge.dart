@@ -182,6 +182,10 @@ class NativeBridge {
     }
   }
 
+  /// [platformInfo]'s result once it has been read (it's read at startup),
+  /// for synchronous checks in widget builds.
+  NativePlatformInfo? get cachedPlatformInfo => _info;
+
   Future<NativePlatformInfo> platformInfo() async {
     if (_info != null) return _info!;
     try {

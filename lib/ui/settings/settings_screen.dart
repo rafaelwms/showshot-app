@@ -192,7 +192,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                         ),
                                       ),
                                     ),
-                                  if (Platform.isWindows)
+                                  // Linux: X11 only — Wayland has no "skip
+                                  // taskbar" hint (and GNOME already shows
+                                  // no dock icon while the window is hidden).
+                                  if (Platform.isWindows ||
+                                      (Platform.isLinux &&
+                                          services
+                                                  .native
+                                                  .cachedPlatformInfo
+                                                  ?.isWayland ==
+                                              false))
                                     _SettingRow(
                                       title: strings.showTaskbarIcon,
                                       subtitle: strings.showTaskbarIconHint,

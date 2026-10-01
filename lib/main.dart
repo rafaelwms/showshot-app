@@ -121,7 +121,8 @@ Future<void> main(List<String> args) async {
       () => native.setDockIconVisible(settings.settings.showDockIcon),
     );
   }
-  if (Platform.isWindows) {
+  if (Platform.isWindows ||
+      (Platform.isLinux && !(await native.platformInfo()).isWayland)) {
     await windowManager.setSkipTaskbar(!settings.settings.showTaskbarIcon);
     settings.addListener(
       () => windowManager.setSkipTaskbar(!settings.settings.showTaskbarIcon),
