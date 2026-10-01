@@ -162,7 +162,8 @@ sudo apt install ./build/deb/showshot_*_amd64.deb
 ```
 
 Quem já usou o `install-local.sh` deve rodar `linux/packaging/install-local.sh --uninstall`
-antes de instalar o pacote **e sair/entrar na sessão**: o GNOME Shell guarda em memória a
+antes de instalar o pacote (o script também limpa o cache de ícones do usuário — apagar os
+arquivos à mão deixa o app sem ícone no menu) **e sair/entrar na sessão**: o GNOME Shell guarda em memória a
 entrada antiga (mesmo id `com.rafaelwms.showshot`) e continua tentando abrir o caminho de
 `~/.local` até o próximo login.
 
