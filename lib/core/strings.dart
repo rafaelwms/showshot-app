@@ -108,7 +108,12 @@ abstract class Strings {
   String get discard;
   String get copied;
   String savedTo(String path);
+  String savedManyTo(int count, String directory);
   String get saveFailed;
+  String get allScreens;
+  String get allScreensHint;
+  String get allScreensPerScreen;
+  String get allScreensCombined;
   String get textPlaceholder;
   String get discardConfirmTitle;
   String get discardConfirmBody;
@@ -191,6 +196,7 @@ class _Pt extends Strings {
     CaptureMode.window => 'Janela',
     CaptureMode.fullScreen => 'Tela inteira',
     CaptureMode.text => 'Texto',
+    CaptureMode.allScreens => 'Todas as telas',
   };
 
   @override
@@ -199,6 +205,8 @@ class _Pt extends Strings {
     CaptureMode.window => 'Clique em uma janela para capturá-la',
     CaptureMode.fullScreen => 'Captura o monitor sob o cursor',
     CaptureMode.text => 'Arraste para reconhecer o texto de uma região',
+    CaptureMode.allScreens =>
+      'Salva todos os monitores de uma vez, sem abrir o editor',
   };
 
   @override
@@ -352,7 +360,19 @@ class _Pt extends Strings {
   @override
   String savedTo(String path) => 'Salvo em $path';
   @override
+  String savedManyTo(int count, String directory) =>
+      '$count telas salvas em $directory';
+  @override
   String get saveFailed => 'Não foi possível salvar o arquivo.';
+  @override
+  String get allScreens => 'Todas as telas';
+  @override
+  String get allScreensHint =>
+      'Atalho/menu "Todas as telas": salva direto na pasta de destino, sem perguntar. Copiar ao salvar só vale para a imagem combinada.';
+  @override
+  String get allScreensPerScreen => 'Um arquivo por tela';
+  @override
+  String get allScreensCombined => 'Uma imagem combinada';
   @override
   String get textPlaceholder => 'Digite o texto…';
   @override
@@ -525,6 +545,7 @@ class _En extends Strings {
     CaptureMode.window => 'Window',
     CaptureMode.fullScreen => 'Full screen',
     CaptureMode.text => 'Text',
+    CaptureMode.allScreens => 'All screens',
   };
 
   @override
@@ -533,6 +554,8 @@ class _En extends Strings {
     CaptureMode.window => 'Click a window to capture it',
     CaptureMode.text => 'Drag to recognize text in a region',
     CaptureMode.fullScreen => 'Captures the display under the cursor',
+    CaptureMode.allScreens =>
+      'Saves every display at once, without opening the editor',
   };
 
   @override
@@ -686,7 +709,19 @@ class _En extends Strings {
   @override
   String savedTo(String path) => 'Saved to $path';
   @override
+  String savedManyTo(int count, String directory) =>
+      '$count screens saved to $directory';
+  @override
   String get saveFailed => 'Could not save the file.';
+  @override
+  String get allScreens => 'All screens';
+  @override
+  String get allScreensHint =>
+      'The "All screens" shortcut/menu saves straight to the destination folder, without asking. Copy when saving only applies to the combined image.';
+  @override
+  String get allScreensPerScreen => 'One file per screen';
+  @override
+  String get allScreensCombined => 'One combined image';
   @override
   String get textPlaceholder => 'Type your text…';
   @override

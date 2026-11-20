@@ -572,6 +572,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                     ),
                                   ),
                                   _SettingRow(
+                                    title: strings.allScreens,
+                                    subtitle: strings.allScreensHint,
+                                    trailing: _Dropdown<AllScreensMode>(
+                                      value: settings.allScreensMode,
+                                      items: {
+                                        AllScreensMode.perScreen:
+                                            strings.allScreensPerScreen,
+                                        AllScreensMode.combined:
+                                            strings.allScreensCombined,
+                                      },
+                                      onChanged: (v) => update(
+                                        (s) => s.copyWith(allScreensMode: v),
+                                      ),
+                                    ),
+                                  ),
+                                  _SettingRow(
                                     title: strings.systemNotifications,
                                     subtitle: strings.systemNotificationsHint,
                                     trailing: Switch(

@@ -30,6 +30,10 @@ class NotificationService {
       switch (message.kind) {
         FlowMessageKind.copied => strings.copied,
         FlowMessageKind.saved => strings.savedTo(message.path ?? ''),
+        FlowMessageKind.savedMany => strings.savedManyTo(
+          message.count,
+          message.path ?? '',
+        ),
         FlowMessageKind.saveFailed => strings.saveFailed,
         FlowMessageKind.captureFailed => strings.captureFailed,
         FlowMessageKind.textCopied => strings.textCopied,

@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shoshot/models/app_settings.dart';
+import 'package:shoshot/models/capture_mode.dart';
 import 'package:shoshot/services/file_namer.dart';
 
 final _now = DateTime(2026, 11, 20, 13, 5, 9);
@@ -205,6 +206,103 @@ void main() {
       expect(s.nameDigits, 5);
       expect(s.sequenceNext, 1);
       expect(s.fileNaming, FileNaming.timestamp);
+    });
+  });
+
+  group('nextBatch (all screens, one file per display)', () {
+    Future<List<GeneratedName>> batch(
+      AppSettings s,
+      int count, [
+      Set<String> taken = const {},
+    ]) => FileNamer.nextBatch(
+      settings: s,
+      now: _now,
+      count: count,
+      exists: (n) async => taken.contains(n),
+    );
+
+    test('timestamp: _1, _2, _3 by display index', () async {
+      final r = await batch(AppSettings.defaults(), 3);
+      expect(r.map((n) => n.name), [
+        'ShowShot_2026-11-20_13-05-09_1.png',
+        'ShowShot_2026-11-20_13-05-09_2.png',
+        'ShowShot_2026-11-20_13-05-09_3.png',
+      ]);
+      expect(r.every((n) => n.usedNumber == null), isTrue);
+    });
+
+    test('timestamp: a single display keeps the plain name', () async {
+      final r = await batch(AppSettings.defaults(), 1);
+      expect(r.single.name, 'ShowShot_2026-11-20_13-05-09.png');
+    });
+
+    test('timestamp: honours the jpg extension', () async {
+      final r = await batch(
+        AppSettings.defaults().copyWith(saveFormat: ImageFormat.jpg),
+        2,
+      );
+      expect(r.last.name, 'ShowShot_2026-11-20_13-05-09_2.jpg');
+    });
+
+    test('sequence: each display consumes one number, in order', () async {
+      final r = await batch(seq(next: 5), 3);
+      expect(r.map((n) => n.name), [
+        'ARQUIVO_05.png',
+        'ARQUIVO_06.png',
+        'ARQUIVO_07.png',
+      ]);
+      expect(r.map((n) => n.usedNumber), [5, 6, 7]);
+      expect(r.last.nextCounter, 8);
+    });
+
+    test('sequence: skips numbers whose file already exists', () async {
+      final r = await batch(seq(next: 1), 3, {
+        'ARQUIVO_02.png',
+        'ARQUIVO_03.png',
+      });
+      expect(r.map((n) => n.name), [
+        'ARQUIVO_01.png',
+        'ARQUIVO_04.png',
+        'ARQUIVO_05.png',
+      ]);
+      expect(r.last.nextCounter, 6);
+    });
+
+    test('sequence: single display behaves like next()', () async {
+      final r = await batch(seq(next: 9), 1);
+      final single = await nextWith(seq(next: 9), {});
+      expect(r.single.name, single.name);
+      expect(r.single.usedNumber, single.usedNumber);
+    });
+
+    test('all names in a batch are distinct', () async {
+      for (final s in [AppSettings.defaults(), seq()]) {
+        final r = await batch(s, 4);
+        expect(r.map((n) => n.name).toSet().length, 4);
+      }
+    });
+  });
+
+  group('allScreensMode setting', () {
+    test('defaults to one file per screen and round-trips', () {
+      expect(AppSettings.defaults().allScreensMode, AllScreensMode.perScreen);
+      final back = AppSettings.fromJson(
+        AppSettings.defaults()
+            .copyWith(allScreensMode: AllScreensMode.combined)
+            .toJson(),
+      );
+      expect(back.allScreensMode, AllScreensMode.combined);
+      expect(
+        AppSettings.fromJson(const {'allScreensMode': 'bogus'}).allScreensMode,
+        AllScreensMode.perScreen,
+      );
+    });
+
+    test('has a default hotkey that does not clash with the others', () {
+      final keys = AppSettings.defaultHotKeys();
+      expect(keys[CaptureMode.allScreens], isNotNull);
+      final ids = keys.values.map((h) => h!.key).toSet();
+      expect(ids.length, keys.length);
     });
   });
 }

@@ -72,12 +72,14 @@ class FileNamer {
     return '${sanitizePrefix(prefix)}${separatorText(separator)}$counter.$extension';
   }
 
-  /// The classic `ShowShot_2026-11-20_13-05-09.png` name.
-  static String timestampName(String extension, DateTime when) {
+  /// The classic `ShowShot_2026-11-20_13-05-09.png` name. [index] (1-based)
+  /// adds a `_<index>` suffix, used when one capture writes several files.
+  static String timestampName(String extension, DateTime when, {int? index}) {
     String two(int v) => v.toString().padLeft(2, '0');
     final stamp =
         '${when.year}-${two(when.month)}-${two(when.day)}_${two(when.hour)}-${two(when.minute)}-${two(when.second)}';
-    return 'ShowShot_$stamp.$extension';
+    final suffix = index == null ? '' : '_$index';
+    return 'ShowShot_$stamp$suffix.$extension';
   }
 
   /// Name for the next save. In sequence mode, starts at
@@ -105,6 +107,53 @@ class FileNamer {
       return GeneratedName(name, number);
     }
     return GeneratedName(timestampName(ext, now), null);
+  }
+
+  /// Names for [count] files written by one capture ("All screens", one file
+  /// per display, in display order).
+  ///
+  /// - Timestamp scheme: the same timestamp for all, plus `_1`, `_2`… by
+  ///   position; a lone file gets no suffix.
+  /// - Sequence scheme: each file consumes the next free number (taken ones
+  ///   are skipped, like [next]).
+  ///
+  /// The counter to persist afterwards is the last entry's
+  /// [GeneratedName.nextCounter] (null when no number was consumed).
+  static Future<List<GeneratedName>> nextBatch({
+    required AppSettings settings,
+    required DateTime now,
+    required int count,
+    required Future<bool> Function(String fileName) exists,
+  }) async {
+    final ext = settings.saveFormat.name;
+    String stamped(int i) =>
+        timestampName(ext, now, index: count > 1 ? i + 1 : null);
+    final names = <GeneratedName>[];
+    if (settings.fileNaming == FileNaming.timestamp) {
+      for (var i = 0; i < count; i++) {
+        names.add(GeneratedName(stamped(i), null));
+      }
+      return names;
+    }
+    var number = settings.sequenceNext < 1 ? 1 : settings.sequenceNext;
+    for (var i = 0; i < count; i++) {
+      GeneratedName? found;
+      for (var probe = 0; probe < maxProbes; probe++, number++) {
+        final name = sequentialName(
+          prefix: settings.namePrefix,
+          separator: settings.nameSeparator,
+          digits: settings.nameDigits,
+          number: number,
+          extension: ext,
+        );
+        if (isReservedStem(name) || await exists(name)) continue;
+        found = GeneratedName(name, number);
+        number++;
+        break;
+      }
+      names.add(found ?? GeneratedName(stamped(i), null));
+    }
+    return names;
   }
 
   /// Settings-screen preview: the name the counter would produce right now,

@@ -278,6 +278,7 @@ class _CaptureCardState extends State<_CaptureCard> {
     CaptureMode.window => Icons.web_asset_rounded,
     CaptureMode.fullScreen => Icons.desktop_windows_rounded,
     CaptureMode.text => Icons.text_fields_rounded,
+    CaptureMode.allScreens => Icons.devices_rounded,
   };
 
   @override

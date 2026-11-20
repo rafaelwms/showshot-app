@@ -16,6 +16,7 @@ import '../services/export_service.dart';
 import '../services/native_bridge.dart';
 import '../services/notification_service.dart';
 import '../services/ocr_service.dart';
+import '../services/screen_layout.dart';
 import '../services/settings_service.dart';
 
 export '../models/flow_message.dart';
@@ -169,6 +170,12 @@ class CaptureFlow extends ChangeNotifier with WindowListener {
         await Future<void>.delayed(const Duration(milliseconds: 220));
       }
 
+      // "All screens" has no overlay or editor: capture, save, report.
+      if (mode == CaptureMode.allScreens) {
+        await _saveAllScreens();
+        return;
+      }
+
       final session = await capture.captureUnderCursor(mode);
       _session = session;
 
@@ -283,6 +290,79 @@ class CaptureFlow extends ChangeNotifier with WindowListener {
     } finally {
       _busy = false;
       notifyListeners();
+    }
+  }
+
+  /// The "All screens" action: captures every display and writes the result
+  /// straight to the target folder (never a Save As dialog, whatever "ask
+  /// where to save" says — one dialog per file would be unusable, and the
+  /// shortcut is meant to be one keypress).
+  ///
+  /// Per-screen mode writes one file per display; combined mode stitches them
+  /// by their real desktop positions into one image. "Copy when saving" only
+  /// applies when a single file results (combined, a single display, or a
+  /// whole-desktop image from Wayland): there is no sensible clipboard content
+  /// for N separate files.
+  Future<void> _saveAllScreens() async {
+    final current = settings.settings;
+    final combined = current.allScreensMode == AllScreensMode.combined;
+    final captured = await capture.captureAllDisplays(combined: combined);
+    ui.Image? stitched;
+    try {
+      final List<ui.Image> images;
+      final whole = captured.wholeDesktop;
+      if (whole != null) {
+        images = [whole];
+      } else if (combined && captured.shots.length > 1) {
+        final layout = ScreenLayout.compute([
+          for (final shot in captured.shots)
+            ScreenTile(
+              globalBounds: shot.display.bounds,
+              pixelsPerUnit: shot.display.pixelsPerGlobalUnit,
+            ),
+        ]);
+        stitched = await ExportService.compose(
+          [for (final shot in captured.shots) shot.image],
+          layout,
+          opaqueBlack: current.saveFormat == ImageFormat.jpg,
+        );
+        images = [stitched];
+      } else {
+        images = [for (final shot in captured.shots) shot.image];
+      }
+
+      final List<String> paths;
+      try {
+        paths = await export.saveBatch(images, current);
+      } catch (error, stack) {
+        debugPrint('Saving all screens failed: $error\n$stack');
+        _lastMessage = null;
+        await _report(const FlowMessage(FlowMessageKind.saveFailed));
+        _setStage(FlowStage.idle);
+        await _finish();
+        return;
+      }
+
+      for (final path in paths.reversed) {
+        await settings.addRecentFile(path);
+      }
+      if (images.length == 1 && current.copyAfterSave) {
+        await export.copyToClipboard(images.first);
+      }
+      await _report(
+        paths.length == 1
+            ? FlowMessage(FlowMessageKind.saved, path: paths.first)
+            : FlowMessage(
+                FlowMessageKind.savedMany,
+                path: File(paths.first).parent.path,
+                count: paths.length,
+              ),
+      );
+      _setStage(FlowStage.idle);
+      await _finish();
+    } finally {
+      stitched?.dispose();
+      captured.dispose();
     }
   }
 

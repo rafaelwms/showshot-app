@@ -10,6 +10,7 @@ import '../models/annotation.dart';
 import '../models/app_settings.dart';
 import 'file_namer.dart';
 import 'native_bridge.dart';
+import 'screen_layout.dart';
 
 /// Renders, encodes, copies and saves screenshots.
 class ExportService {
@@ -53,6 +54,47 @@ class ExportService {
     final picture = recorder.endRecording();
     final result = await picture.toImage(src.width.round(), src.height.round());
     picture.dispose();
+    return result;
+  }
+
+  /// Stitches per-display [images] onto one canvas following [layout]
+  /// (`layout.destRects[i]` is where `images[i]` goes). The gaps stay
+  /// transparent, or black when [opaqueBlack] is set (JPG has no alpha).
+  /// Drawing and the PNG encode run on the engine's raster/IO threads, not
+  /// the UI thread; JPG encoding goes through an isolate (see [encodeJpg]).
+  static Future<ui.Image> compose(
+    List<ui.Image> images,
+    CombinedLayout layout, {
+    bool opaqueBlack = false,
+  }) async {
+    final recorder = ui.PictureRecorder();
+    final canvas = ui.Canvas(recorder);
+    final size = ui.Rect.fromLTWH(
+      0,
+      0,
+      layout.width.toDouble(),
+      layout.height.toDouble(),
+    );
+    if (opaqueBlack) {
+      canvas.drawRect(size, ui.Paint()..color = const ui.Color(0xFF000000));
+    }
+    final paint = ui.Paint()..filterQuality = ui.FilterQuality.high;
+    for (var i = 0; i < images.length; i++) {
+      final image = images[i];
+      canvas.drawImageRect(
+        image,
+        ui.Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble()),
+        layout.destRects[i],
+        paint,
+      );
+    }
+    final picture = recorder.endRecording();
+    final ui.Image result;
+    try {
+      result = await picture.toImage(layout.width, layout.height);
+    } finally {
+      picture.dispose();
+    }
     return result;
   }
 
@@ -320,6 +362,78 @@ class ExportService {
     if (consumed != null) onSequenceAdvanced?.call(consumed + 1);
     onSaved?.call(File(path).parent.path);
     return path;
+  }
+
+  /// Saves several images (one file each, in order) into the target folder,
+  /// never asking where: the "All screens" path. Names follow
+  /// [FileNamer.nextBatch]. Returns the written paths; the folder is the
+  /// parent of any of them. Like [save], a failed write into the "last used
+  /// folder" is retried once in the default folder.
+  Future<List<String>> saveBatch(
+    List<ui.Image> images,
+    AppSettings settings,
+  ) async {
+    final format = settings.saveFormat;
+    final encoded = <Uint8List>[
+      for (final image in images)
+        format == ImageFormat.jpg
+            ? await encodeJpg(image, settings.jpgQuality)
+            : await encodePng(image),
+    ];
+    Future<List<String>> write(Directory dir, List<GeneratedName> names) async {
+      final paths = <String>[
+        for (final n in names) '${dir.path}${Platform.pathSeparator}${n.name}',
+      ];
+      var written = 0;
+      try {
+        for (; written < paths.length; written++) {
+          await File(paths[written])
+              .writeAsBytes(encoded[written], flush: true);
+        }
+      } catch (_) {
+        // All or nothing: don't leave half a batch behind (a later timestamp
+        // save could overwrite it, and the counter isn't advanced for it).
+        for (var i = 0; i < written; i++) {
+          try {
+            await File(paths[i]).delete();
+          } catch (_) {}
+        }
+        rethrow;
+      }
+      return paths;
+    }
+
+    Future<(Directory, List<GeneratedName>)> plan({
+      bool ignoreLast = false,
+    }) async {
+      final dir = await targetDirectory(settings, ignoreLast: ignoreLast);
+      final names = await FileNamer.nextBatch(
+        settings: settings,
+        now: DateTime.now(),
+        count: images.length,
+        exists: (name) =>
+            File('${dir.path}${Platform.pathSeparator}$name').exists(),
+      );
+      return (dir, names);
+    }
+
+    var (dir, names) = await plan();
+    List<String> paths;
+    try {
+      paths = await write(dir, names);
+    } on FileSystemException {
+      if (!settings.saveToLastFolder || settings.lastSaveDirectory.isEmpty) {
+        rethrow;
+      }
+      (dir, names) = await plan(ignoreLast: true);
+      paths = await write(dir, names);
+    }
+    final used = names.map((n) => n.usedNumber).whereType<int>();
+    if (used.isNotEmpty) {
+      onSequenceAdvanced?.call(used.reduce((a, b) => a > b ? a : b) + 1);
+    }
+    onSaved?.call(dir.path);
+    return paths;
   }
 }
 

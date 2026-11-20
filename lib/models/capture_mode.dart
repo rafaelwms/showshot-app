@@ -12,4 +12,9 @@ enum CaptureMode {
   /// Freeze the screen and let the user drag a rectangle to recognize text
   /// in, instead of an image.
   text,
+
+  /// Captures every connected display at once and saves straight to disk
+  /// (no overlay, no editor). Handled by `CaptureFlow`, never reaches the
+  /// overlay.
+  allScreens,
 }

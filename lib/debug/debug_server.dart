@@ -271,6 +271,13 @@ class DebugCommandServer {
                   orElse: () => s.nameSeparator,
                 ),
               ),
+              // `setting allScreens perScreen|combined`
+              'allScreens' => s.copyWith(
+                allScreensMode: AllScreensMode.values.firstWhere(
+                  (m) => m.name.toLowerCase() == raw.toLowerCase(),
+                  orElse: () => s.allScreensMode,
+                ),
+              ),
               'magnifier' => s.copyWith(showMagnifier: value),
               'rememberTools' => s.copyWith(rememberTools: value),
               'taskbar' => s.copyWith(showTaskbarIcon: value),
@@ -301,6 +308,7 @@ class DebugCommandServer {
             FlowMessage(
               kind,
               path: '/Users/demo/Pictures/ShowShot/capture.png',
+              count: 3,
             ),
           );
           return 'delivered=$shown';

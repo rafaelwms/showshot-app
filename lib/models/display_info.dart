@@ -31,6 +31,11 @@ class DisplayInfo {
   /// Size of the display in device pixels (the captured image size).
   Size get pixelSize => logicalSize * scale;
 
+  /// Captured image pixels per unit of the global coordinate space
+  /// (`scale` on macOS where the space is points, 1.0 where it is already
+  /// physical pixels). Used to stitch displays with different scales.
+  double get pixelsPerGlobalUnit => scale / globalPixelRatio;
+
   bool containsGlobal(Offset point) => bounds.contains(point);
 
   /// Converts a global point into logical coordinates local to this display.

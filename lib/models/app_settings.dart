@@ -16,6 +16,9 @@ enum FileNaming { timestamp, sequence }
 /// Glue between the prefix and the counter in sequential names.
 enum NameSeparator { underscore, dash, space, none }
 
+/// What "All screens" writes: one file per display, or a single stitched image.
+enum AllScreensMode { perScreen, combined }
+
 enum AppLanguage { system, portuguese, english }
 
 /// How the editor window opens: at a size derived from the capture, maximized
@@ -60,6 +63,7 @@ class AppSettings {
     this.sequenceNext = 1,
     this.askWhereToSave = true,
     this.copyAfterSave = true,
+    this.allScreensMode = AllScreensMode.perScreen,
     this.systemNotifications = true,
     this.showMagnifier = true,
     this.afterCaptureAction = AfterCaptureAction.openEditor,
@@ -105,6 +109,9 @@ class AppSettings {
   final String lastSaveDirectory;
   final bool copyAfterSave;
 
+  /// Output of the "All screens" action.
+  final AllScreensMode allScreensMode;
+
   /// Report copied/saved/text-recognized as OS notifications (instead of an
   /// in-app toast that a hidden window can't show).
   final bool systemNotifications;
@@ -145,6 +152,11 @@ class AppSettings {
       key: PhysicalKeyboardKey.digit4,
       modifiers: const [HotKeyModifier.control, HotKeyModifier.shift],
     ),
+    CaptureMode.allScreens: HotKey(
+      identifier: 'shoshot.allscreens',
+      key: PhysicalKeyboardKey.digit5,
+      modifiers: const [HotKeyModifier.control, HotKeyModifier.shift],
+    ),
   };
 
   factory AppSettings.defaults() => AppSettings(hotKeys: defaultHotKeys());
@@ -168,6 +180,7 @@ class AppSettings {
     bool? saveToLastFolder,
     String? lastSaveDirectory,
     bool? copyAfterSave,
+    AllScreensMode? allScreensMode,
     bool? systemNotifications,
     bool? showMagnifier,
     AfterCaptureAction? afterCaptureAction,
@@ -200,6 +213,7 @@ class AppSettings {
       saveToLastFolder: saveToLastFolder ?? this.saveToLastFolder,
       lastSaveDirectory: lastSaveDirectory ?? this.lastSaveDirectory,
       copyAfterSave: copyAfterSave ?? this.copyAfterSave,
+      allScreensMode: allScreensMode ?? this.allScreensMode,
       systemNotifications: systemNotifications ?? this.systemNotifications,
       showMagnifier: showMagnifier ?? this.showMagnifier,
       afterCaptureAction: afterCaptureAction ?? this.afterCaptureAction,
@@ -233,6 +247,7 @@ class AppSettings {
     'saveToLastFolder': saveToLastFolder,
     'lastSaveDirectory': lastSaveDirectory,
     'copyAfterSave': copyAfterSave,
+    'allScreensMode': allScreensMode.name,
     'systemNotifications': systemNotifications,
     'showMagnifier': showMagnifier,
     'afterCaptureAction': afterCaptureAction.name,
@@ -289,6 +304,10 @@ class AppSettings {
       saveToLastFolder: json['saveToLastFolder'] as bool? ?? false,
       lastSaveDirectory: json['lastSaveDirectory'] as String? ?? '',
       copyAfterSave: json['copyAfterSave'] as bool? ?? true,
+      allScreensMode: AllScreensMode.values.byNameOr(
+        json['allScreensMode'],
+        AllScreensMode.perScreen,
+      ),
       systemNotifications: json['systemNotifications'] as bool? ?? true,
       showMagnifier: json['showMagnifier'] as bool? ?? true,
       afterCaptureAction: AfterCaptureAction.values.byNameOr(

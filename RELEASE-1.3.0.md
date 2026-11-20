@@ -28,7 +28,8 @@ Registro combinado com o Rafael em 2026-11-20. Status: `[ ]` pendente, `[~]` em 
   - Implementado em 2026-11-20 (`saveToLastFolder` + `lastSaveDirectory`, `ExportService.resolveSaveDirectoryPath`, teste em `test/save_directory_test.dart`); falta validar manualmente (Win/Linux/macOS sandbox).
 - [~] **M4 — Configurações: padrão de nome para arquivos sequenciais.** Prefixo customizado: `ARQUIVO_01.png`, `FOTO_01.png`… (definir largura do contador e como o contador continua).
   - Implementado em 2026-11-20 (`FileNamer` em `lib/services/file_namer.dart`, campos `fileNaming/namePrefix/nameSeparator/nameDigits/sequenceNext`, UI em Salvar, teste em `test/file_namer_test.dart`); falta validar manualmente.
-- [ ] **M5 — Configurações: "Salvar todas as telas" (nova opção).** Captura/salva todos os monitores.
+- [~] **M5 — Configurações: "Salvar todas as telas" (nova opção).** Captura/salva todos os monitores.
+  - Implementado em 2026-11-20 (`CaptureMode.allScreens` + atalho Ctrl+Shift+5 + item do tray/card da Home, `AppSettings.allScreensMode` perScreen|combined, `ScreenLayout` em `lib/services/screen_layout.dart`, `FileNamer.nextBatch`, `ExportService.compose/saveBatch`; testes em `test/screen_layout_test.dart` e `test/file_namer_test.dart`); falta validar manualmente (1 e 2+ monitores, mixed-DPI, Wayland).
 
 - [ ] **M6 — Editor: ferramenta Carimbo (clone stamp, estilo Photoshop).** Alt/Option+clique define a origem; ao pintar, copia da origem mantendo o deslocamento (modo alinhado). Tamanho do pincel e dureza (borda suave). Não destrutivo, com undo, editável/selecionável como as demais anotações.
 - [ ] **M7 — Editor: alinhamento do texto.** Esquerda/centro/direita (justificar a decidir) na ferramenta Texto e alterável pela ferramenta Seleção (barra de propriedades).
@@ -65,3 +66,7 @@ M8 vem antes de M6/M1 para que as ferramentas novas já nasçam com os ícones n
 - [ ] `flutter analyze` limpo, `dart format`, `flutter test`
 - [ ] Builds: macOS arm64 (Mac), Windows x64 (Desktop), Windows arm64 (Radxa), Linux x64 (Desktop), Linux arm64 (Radxa)
 - [ ] Testes por plataforma via debug server; correção C1 validada via Winget
+
+## Notas para o changelog
+
+- Linux/Wayland: o novo atalho "Todas as telas" muda o conjunto de atalhos, então o GNOME ou o KDE vão pedir uma vez para confirmar os atalhos depois da atualização.

@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
@@ -9,13 +10,41 @@ import '../models/capture_mode.dart';
 import '../models/capture_session.dart';
 import '../models/display_info.dart';
 import '../models/window_info.dart';
+import 'export_service.dart';
 import 'native_bridge.dart';
+import 'screen_layout.dart';
 
 class CaptureException implements Exception {
   CaptureException(this.message);
   final String message;
   @override
   String toString() => 'CaptureException: $message';
+}
+
+/// One display's screenshot, in device pixels.
+class DisplayShot {
+  const DisplayShot(this.display, this.image);
+  final DisplayInfo display;
+  final ui.Image image;
+}
+
+/// Result of capturing every display.
+///
+/// Either [shots] (one image per display, in left-to-right order), or
+/// [wholeDesktop] when the platform could only deliver one image of the whole
+/// desktop (Linux/Wayland combined mode, a single display, or a layout the
+/// image can't be cropped by).
+class AllScreensCapture {
+  const AllScreensCapture({this.shots = const [], this.wholeDesktop});
+  final List<DisplayShot> shots;
+  final ui.Image? wholeDesktop;
+
+  void dispose() {
+    for (final shot in shots) {
+      shot.image.dispose();
+    }
+    wholeDesktop?.dispose();
+  }
 }
 
 /// Produces [CaptureSession]s by freezing the display under the cursor.
@@ -71,6 +100,108 @@ class CaptureService {
     );
   }
 
+  /// Captures every connected display (see [AllScreensCapture]). Windows and
+  /// macOS/X11 capture each display natively; on Wayland (and tool-based
+  /// fallbacks) the desktop comes as one image, which is returned as-is when
+  /// [combined] is true and cropped per display otherwise.
+  Future<AllScreensCapture> captureAllDisplays({required bool combined}) async {
+    final info = await _native.platformInfo();
+    final all = await _native.getDisplays();
+    if (all.isEmpty) throw CaptureException('No displays found');
+    // Left-to-right order, independent of how the OS enumerates monitors.
+    final order = ScreenLayout.spatialOrder([for (final d in all) d.bounds]);
+    final displays = [for (final i in order) all[i]];
+
+    if (info.supportsNativeCapture) {
+      final shots = <DisplayShot>[];
+      try {
+        for (final display in displays) {
+          shots.add(DisplayShot(display, await _captureNative(display)));
+        }
+      } catch (_) {
+        for (final shot in shots) {
+          shot.image.dispose();
+        }
+        rethrow;
+      }
+      return AllScreensCapture(shots: shots);
+    }
+
+    // One image for the whole desktop (the portal has no per-monitor shot).
+    final ui.Image desktop;
+    if (info.isWayland) {
+      desktop = await _portalDesktopImage();
+    } else {
+      desktop = await _systemToolImage();
+    }
+    if (combined || displays.length == 1) {
+      return AllScreensCapture(wholeDesktop: desktop);
+    }
+
+    // Per-screen: crop each display out of the desktop image, offsets relative
+    // to the top-left corner of the whole layout. When the image doesn't match
+    // that layout (fractional scaling quirks...), cropping would guess wrong:
+    // keep the single image instead.
+    var minX = double.infinity;
+    var minY = double.infinity;
+    var maxX = -double.infinity;
+    var maxY = -double.infinity;
+    for (final d in displays) {
+      minX = math.min(minX, d.bounds.left);
+      minY = math.min(minY, d.bounds.top);
+      maxX = math.max(maxX, d.bounds.left + d.pixelSize.width);
+      maxY = math.max(maxY, d.bounds.top + d.pixelSize.height);
+    }
+    final fits =
+        (desktop.width - (maxX - minX)).abs() <= 4 &&
+        (desktop.height - (maxY - minY)).abs() <= 4;
+    if (!fits) {
+      debugPrint(
+        'Desktop image ${desktop.width}x${desktop.height} does not match the '
+        'display layout; saving it as a single image',
+      );
+      return AllScreensCapture(wholeDesktop: desktop);
+    }
+    final shots = <DisplayShot>[];
+    for (final display in displays) {
+      final size = display.pixelSize;
+      final rect = ui.Rect.fromLTWH(
+        display.bounds.left - minX,
+        display.bounds.top - minY,
+        size.width,
+        size.height,
+      );
+      try {
+        shots.add(
+          DisplayShot(display, await ExportService.crop(desktop, rect)),
+        );
+      } catch (_) {
+        for (final shot in shots) {
+          shot.image.dispose();
+        }
+        desktop.dispose();
+        rethrow;
+      }
+    }
+    desktop.dispose();
+    return AllScreensCapture(shots: shots);
+  }
+
+  /// Linux/Wayland: the portal's whole-desktop screenshot, falling back to a
+  /// CLI tool when the portal call fails.
+  Future<ui.Image> _portalDesktopImage() async {
+    try {
+      return await _decode(await _native.captureScreenshotPortal());
+    } on PlatformException catch (error) {
+      if (error.code == 'cancelled') rethrow;
+      debugPrint(
+        'Portal screenshot failed (${error.code}: ${error.message}); '
+        'falling back to CLI tools',
+      );
+      return await _systemToolImage();
+    }
+  }
+
   Future<ui.Image> _captureNative(DisplayInfo display) async {
     try {
       final raw = await _native.captureDisplay(display.id);
@@ -108,7 +239,11 @@ class CaptureService {
 
   /// Fallback for platforms with no portal (or an older one): ask a desktop
   /// screenshot tool to write a PNG and crop it to the target display.
-  Future<ui.Image> _captureWithSystemTools(DisplayInfo display) async {
+  Future<ui.Image> _captureWithSystemTools(DisplayInfo display) async =>
+      _cropToDisplay(await _systemToolImage(), display);
+
+  /// Whole-desktop screenshot written by the first available CLI tool.
+  Future<ui.Image> _systemToolImage() async {
     final tmp = await getTemporaryDirectory();
     final path =
         '${tmp.path}/shoshot_${DateTime.now().millisecondsSinceEpoch}.png';
@@ -131,10 +266,7 @@ class CaptureService {
             await file.length() > 0) {
           final bytes = await file.readAsBytes();
           await file.delete();
-          final codec = await ui.instantiateImageCodec(bytes);
-          final frame = await codec.getNextFrame();
-          codec.dispose();
-          return await _cropToDisplay(frame.image, display);
+          return await _decode(bytes);
         }
       } on ProcessException {
         continue;
