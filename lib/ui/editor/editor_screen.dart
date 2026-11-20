@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -11,8 +12,10 @@ import '../../core/theme.dart';
 import '../../debug/debug_server.dart';
 import '../../flow/capture_flow.dart';
 import '../../models/annotation.dart';
+import '../../models/tool_memory.dart';
 import '../../services/export_service.dart';
 import '../../services/notification_service.dart';
+import '../../services/settings_service.dart';
 import '../widgets/common.dart';
 import 'editor_canvas.dart';
 import 'editor_controller.dart';
@@ -34,17 +37,63 @@ class _EditorScreenState extends State<EditorScreen> {
   bool _busy = false;
   bool _wasEditingText = false;
 
+  // "Remember tool settings": debounced persistence of tool + style.
+  static const _rememberDelay = Duration(milliseconds: 300);
+  Timer? _rememberTimer;
+  SettingsService? _settingsService;
+
+  /// Persists the current tool/style right away (no-op when the option is
+  /// off or nothing changed). Called by the debounce timer and on dispose.
+  void _flushToolMemory() {
+    _rememberTimer?.cancel();
+    _rememberTimer = null;
+    final controller = _controller;
+    final service = _settingsService;
+    if (controller == null || service == null) return;
+    final current = service.settings;
+    if (!current.rememberTools) return;
+    final next = ToolMemory.capture(
+      previous: current.toolMemory,
+      tool: controller.tool,
+      style: controller.style,
+      pixelRatio: controller.pixelRatio,
+    );
+    if (next.sameAs(current.toolMemory)) return;
+    // Deferred: this can run while the widget tree is being built/torn down
+    // (didChangeDependencies, dispose), and SettingsService notifies
+    // listeners (Home/Settings ListenableBuilders) synchronously.
+    Future.microtask(() {
+      service.update((s) {
+        return s.rememberTools ? s.copyWith(toolMemory: next) : s;
+      });
+    });
+  }
+
+  void _scheduleToolMemory() {
+    if (_settingsService?.settings.rememberTools != true) return;
+    _rememberTimer?.cancel();
+    _rememberTimer = Timer(_rememberDelay, _flushToolMemory);
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final document = AppScope.of(context).flow.document;
+    final services = AppScope.of(context);
+    _settingsService = services.settings;
+    final document = services.flow.document;
     if (document != null &&
         (_controller == null || _controller!.image != document.image)) {
+      _flushToolMemory();
       _controller?.dispose();
+      final settings = services.settings.settings;
+      final memory = settings.rememberTools ? settings.toolMemory : null;
       _controller = EditorController(
         image: document.image,
         pixelRatio: document.pixelRatio,
         onOcrRegion: (rect) => _extractTextInRegion(rect),
+        onToolSettingsChanged: _scheduleToolMemory,
+        initialTool: memory?.toolType,
+        initialStyle: memory?.toStyle(document.pixelRatio),
       );
       DebugHooks.editor = _controller;
       DebugHooks.editorAction = (action) => switch (action) {
@@ -66,6 +115,7 @@ class _EditorScreenState extends State<EditorScreen> {
 
   @override
   void dispose() {
+    _flushToolMemory();
     if (DebugHooks.editor == _controller) {
       DebugHooks.editor = null;
       DebugHooks.editorAction = null;

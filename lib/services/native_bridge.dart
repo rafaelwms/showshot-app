@@ -397,6 +397,54 @@ class NativeBridge {
     }
   }
 
+  /// Windows: whether the app runs with package identity (Microsoft Store /
+  /// MSIX install). False everywhere else.
+  Future<bool> isPackaged() async {
+    try {
+      return await _channel.invokeMethod<bool>('isPackaged') ?? false;
+    } on MissingPluginException {
+      return false;
+    }
+  }
+
+  /// Windows (packaged): state of the MSIX StartupTask — one of `disabled`,
+  /// `disabledByUser`, `enabled`, `disabledByPolicy`, `enabledByPolicy`, or
+  /// `unavailable` (not packaged, task missing, or unsupported platform).
+  Future<String> startupTaskState() async {
+    try {
+      return await _channel.invokeMethod<String>('startupTaskState') ??
+          'unavailable';
+    } on MissingPluginException {
+      return 'unavailable';
+    }
+  }
+
+  /// Windows (packaged): enables/disables the MSIX StartupTask and returns
+  /// the resulting state (same vocabulary as [startupTaskState]). Enabling
+  /// comes back `disabledByUser` when the user turned it off in Task Manager.
+  Future<String> setStartupTask(bool enable) async {
+    try {
+      return await _channel.invokeMethod<String>('setStartupTask', {
+            'enable': enable,
+          }) ??
+          'unavailable';
+    } on MissingPluginException {
+      return 'unavailable';
+    }
+  }
+
+  /// Windows: opens a URI such as `ms-settings:startupapps` with the shell.
+  Future<bool> openSettingsUri(String uri) async {
+    try {
+      return await _channel.invokeMethod<bool>('openSettingsUri', {
+            'uri': uri,
+          }) ??
+          false;
+    } on MissingPluginException {
+      return false;
+    }
+  }
+
   /// Reads the OS accent color once. Returns null where unsupported (the
   /// caller should keep [SystemAccent.fallback]).
   Future<SystemAccent?> getSystemAccent() async {

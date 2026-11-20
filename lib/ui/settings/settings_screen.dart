@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/app_scope.dart';
 import '../../core/strings.dart';
@@ -11,6 +13,8 @@ import '../../debug/debug_server.dart';
 import '../../models/app_settings.dart';
 import '../../models/capture_mode.dart';
 import '../../services/export_service.dart';
+import '../../services/file_namer.dart';
+import '../../services/startup_service.dart';
 import '../widgets/common.dart';
 import 'hotkey_field.dart';
 
@@ -87,7 +91,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     // immediately, instead of only the widgets that read `settings.xxx`
     // fields directly.
     return ListenableBuilder(
-      listenable: Listenable.merge([services.settings, services.hotkeys]),
+      listenable: Listenable.merge([
+        services.settings,
+        services.hotkeys,
+        services.startup,
+      ]),
       builder: (context, _) {
         final strings = Strings.of(context);
         final settings = services.settings.settings;
@@ -130,6 +138,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                       ),
                                     ),
                                   ),
+                                  if (services.startup.block != null)
+                                    _StartupBlockedHint(
+                                      message:
+                                          services.startup.block ==
+                                              StartupBlock.disabledByPolicy
+                                          ? strings
+                                                .launchAtStartupBlockedByPolicy
+                                          : strings
+                                                .launchAtStartupBlockedByUser,
+                                      buttonLabel:
+                                          services.startup.block ==
+                                              StartupBlock.disabledByUser
+                                          ? strings.openStartupSettings
+                                          : null,
+                                      onOpen: services
+                                          .startup
+                                          .openSystemStartupSettings,
+                                    ),
                                   // Linux panels handle tray clicks themselves.
                                   if (Platform.isMacOS || Platform.isWindows)
                                     _SettingRow(
@@ -178,6 +204,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                       },
                                       onChanged: (v) => update(
                                         (s) => s.copyWith(editorWindow: v),
+                                      ),
+                                    ),
+                                  ),
+                                  _SettingRow(
+                                    title: strings.rememberTools,
+                                    subtitle: strings.rememberToolsHint,
+                                    trailing: Switch(
+                                      value: settings.rememberTools,
+                                      onChanged: (v) => update(
+                                        (s) => s.copyWith(rememberTools: v),
                                       ),
                                     ),
                                   ),
@@ -402,6 +438,77 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                       ),
                                     ),
                                   _SettingRow(
+                                    title: strings.fileNaming,
+                                    trailing: _Dropdown<FileNaming>(
+                                      value: settings.fileNaming,
+                                      items: {
+                                        FileNaming.timestamp:
+                                            strings.fileNamingTimestamp,
+                                        FileNaming.sequence:
+                                            strings.fileNamingSequence,
+                                      },
+                                      onChanged: (v) => update(
+                                        (s) => s.copyWith(fileNaming: v),
+                                      ),
+                                    ),
+                                  ),
+                                  if (settings.fileNaming ==
+                                      FileNaming.sequence) ...[
+                                    _SettingRow(
+                                      title: strings.namePrefix,
+                                      trailing: _PrefixField(
+                                        initial: settings.namePrefix,
+                                        onChanged: (v) => update(
+                                          (s) => s.copyWith(namePrefix: v),
+                                        ),
+                                      ),
+                                    ),
+                                    _SettingRow(
+                                      title: strings.nameSeparator,
+                                      trailing: _Dropdown<NameSeparator>(
+                                        value: settings.nameSeparator,
+                                        items: {
+                                          NameSeparator.underscore: '_',
+                                          NameSeparator.dash: '-',
+                                          NameSeparator.space:
+                                              strings.separatorSpace,
+                                          NameSeparator.none:
+                                              strings.separatorNone,
+                                        },
+                                        onChanged: (v) => update(
+                                          (s) => s.copyWith(nameSeparator: v),
+                                        ),
+                                      ),
+                                    ),
+                                    _SettingRow(
+                                      title: strings.nameDigits,
+                                      trailing: _Dropdown<int>(
+                                        value: settings.nameDigits,
+                                        items: {
+                                          for (var n = 1; n <= 5; n++) n: '$n',
+                                        },
+                                        onChanged: (v) => update(
+                                          (s) => s.copyWith(nameDigits: v),
+                                        ),
+                                      ),
+                                    ),
+                                    _SettingRow(
+                                      title:
+                                          '${strings.nextFile}: ${FileNamer.preview(settings)}',
+                                      subtitle: strings.counterHint,
+                                      trailing: GhostButton(
+                                        label: strings.resetCounter,
+                                        compact: true,
+                                        onPressed: settings.sequenceNext == 1
+                                            ? null
+                                            : () => update(
+                                                (s) =>
+                                                    s.copyWith(sequenceNext: 1),
+                                              ),
+                                      ),
+                                    ),
+                                  ],
+                                  _SettingRow(
                                     title: strings.saveDirectory,
                                     subtitle:
                                         settings.saveDirectory ??
@@ -441,6 +548,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                       value: settings.askWhereToSave,
                                       onChanged: (v) => update(
                                         (s) => s.copyWith(askWhereToSave: v),
+                                      ),
+                                    ),
+                                  ),
+                                  _SettingRow(
+                                    title: strings.saveToLastFolder,
+                                    subtitle: strings.saveToLastFolderHint,
+                                    trailing: Switch(
+                                      value: settings.saveToLastFolder,
+                                      onChanged: (v) => update(
+                                        (s) => s.copyWith(saveToLastFolder: v),
                                       ),
                                     ),
                                   ),
@@ -634,6 +751,133 @@ class _SettingRow extends StatelessWidget {
         const SizedBox(width: 16),
         trailing,
       ],
+    );
+  }
+}
+
+/// Shown under the launch-at-startup switch when Windows refused to enable
+/// it (turned off by the user in Task Manager, or by policy).
+class _StartupBlockedHint extends StatelessWidget {
+  const _StartupBlockedHint({
+    required this.message,
+    required this.onOpen,
+    this.buttonLabel,
+  });
+
+  final String message;
+  final String? buttonLabel;
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          message,
+          style: TextStyle(color: context.palette.textMuted, fontSize: 12.5),
+        ),
+        if (buttonLabel != null)
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              onPressed: onOpen,
+              icon: const Icon(Icons.open_in_new_rounded, size: 16),
+              label: Text(buttonLabel!),
+              style: TextButton.styleFrom(
+                foregroundColor: context.palette.textMuted,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// Prefix text field. Keeps its own controller so typing isn't disturbed by
+/// the screen rebuilding on every settings change.
+class _PrefixField extends StatefulWidget {
+  const _PrefixField({required this.initial, required this.onChanged});
+
+  final String initial;
+  final ValueChanged<String> onChanged;
+
+  @override
+  State<_PrefixField> createState() => _PrefixFieldState();
+}
+
+class _PrefixFieldState extends State<_PrefixField> {
+  late final TextEditingController _controller = TextEditingController(
+    text: widget.initial,
+  );
+
+  Timer? _debounce;
+
+  void _schedule(String value) {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 400), _flush);
+  }
+
+  void _flush([String? _]) {
+    if (_debounce == null) return;
+    _debounce!.cancel();
+    _debounce = null;
+    widget.onChanged(_controller.text);
+  }
+
+  @override
+  void didUpdateWidget(_PrefixField old) {
+    super.didUpdateWidget(old);
+    // External change (e.g. debug server): adopt it unless the user is
+    // mid-edit (a pending write means the field is the newer source).
+    if (_debounce == null && widget.initial != _controller.text) {
+      _controller.text = widget.initial;
+    }
+  }
+
+  @override
+  void dispose() {
+    // Persist a pending edit after teardown: notifying settings listeners
+    // while the tree is locked (dispose) would assert.
+    if (_debounce != null) {
+      _debounce!.cancel();
+      _debounce = null;
+      final onChanged = widget.onChanged;
+      final text = _controller.text;
+      Future.microtask(() => onChanged(text));
+    }
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Focus(
+      onFocusChange: (focused) {
+        if (!focused) _flush();
+      },
+      child: SizedBox(
+        width: 200,
+        child: TextField(
+          controller: _controller,
+          maxLength: FileNamer.maxPrefixLength,
+          inputFormatters: [
+            FilteringTextInputFormatter.deny(RegExp(r'[\\/:*?"<>|\x00-\x1f]')),
+          ],
+          decoration: InputDecoration(
+            isDense: true,
+            counterText: '',
+            hintText: FileNamer.defaultPrefix,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(color: context.palette.borderStrong),
+            ),
+          ),
+          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+          onChanged: _schedule,
+          onSubmitted: _flush,
+        ),
+      ),
     );
   }
 }

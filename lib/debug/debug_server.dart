@@ -242,8 +242,37 @@ class DebugCommandServer {
           await services.settings.update(
             (s) => switch (key) {
               'ask' => s.copyWith(askWhereToSave: value),
+              'lastFolder' => s.copyWith(saveToLastFolder: value),
               'copyAfterSave' => s.copyWith(copyAfterSave: value),
+              // `setting naming timestamp|sequence`
+              'naming' => s.copyWith(
+                fileNaming: raw == 'sequence'
+                    ? FileNaming.sequence
+                    : FileNaming.timestamp,
+              ),
+              // `setting prefix <text>` (rest of the line, may hold spaces)
+              'prefix' => s.copyWith(namePrefix: parts.skip(2).join(' ')),
+              // `setting digits 1..5`, `setting next <n>`
+              'digits' => s.copyWith(
+                nameDigits: switch (int.tryParse(raw)) {
+                  null => s.nameDigits,
+                  final n when n < 1 => 1,
+                  final n when n > 5 => 5,
+                  final n => n,
+                },
+              ),
+              'next' => s.copyWith(
+                sequenceNext: int.tryParse(raw) ?? s.sequenceNext,
+              ),
+              // `setting separator underscore|dash|space|none`
+              'separator' => s.copyWith(
+                nameSeparator: NameSeparator.values.firstWhere(
+                  (n) => n.name == raw,
+                  orElse: () => s.nameSeparator,
+                ),
+              ),
               'magnifier' => s.copyWith(showMagnifier: value),
+              'rememberTools' => s.copyWith(rememberTools: value),
               'taskbar' => s.copyWith(showTaskbarIcon: value),
               'jpg' => s.copyWith(
                 saveFormat: value ? ImageFormat.jpg : ImageFormat.png,

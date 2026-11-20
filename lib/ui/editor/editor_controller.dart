@@ -17,11 +17,17 @@ class EditorController extends ChangeNotifier {
     required this.image,
     required this.pixelRatio,
     this.onOcrRegion,
-  }) : _style = AnnotationStyle(
-         color: AppColors.palette.first,
-         strokeWidth: (3 * pixelRatio).roundToDouble(),
-         fontSize: (20 * pixelRatio).roundToDouble(),
-       ),
+    this.onToolSettingsChanged,
+    ToolType? initialTool,
+    AnnotationStyle? initialStyle,
+  }) : _tool = initialTool ?? ToolType.arrow,
+       _style =
+           initialStyle ??
+           AnnotationStyle(
+             color: AppColors.palette.first,
+             strokeWidth: (3 * pixelRatio).roundToDouble(),
+             fontSize: (20 * pixelRatio).roundToDouble(),
+           ),
        _ocrDraftStyle = AnnotationStyle(
          color: AppColors.cyan,
          strokeWidth: (2 * pixelRatio).roundToDouble(),
@@ -36,6 +42,13 @@ class EditorController extends ChangeNotifier {
   /// copying the text — the controller only reports *where*.
   final void Function(Rect rect)? onOcrRegion;
 
+  /// Called after an *explicit* user change of the active tool ([setTool]) or
+  /// style ([setStyle], i.e. the properties bar). Style syncs caused by
+  /// selecting/resizing an annotation assign `_style` directly and do not
+  /// call this, so they never overwrite remembered defaults. Fires on every
+  /// slider tick: the listener is expected to debounce.
+  final VoidCallback? onToolSettingsChanged;
+
   /// Fixed look for the OCR selection rectangle, independent of the user's
   /// current annotation style — it's a selection, not a drawn shape.
   final AnnotationStyle _ocrDraftStyle;
@@ -46,7 +59,7 @@ class EditorController extends ChangeNotifier {
   final List<List<Annotation>> _undo = [];
   final List<List<Annotation>> _redo = [];
 
-  ToolType _tool = ToolType.arrow;
+  ToolType _tool;
   AnnotationStyle _style;
   String? _selectedId;
   Annotation? _draft;
@@ -118,6 +131,7 @@ class EditorController extends ChangeNotifier {
     _tool = tool;
     if (tool != ToolType.select) _selectedId = null;
     notifyListeners();
+    onToolSettingsChanged?.call();
   }
 
   void setStyle(AnnotationStyle style) {
@@ -130,6 +144,7 @@ class EditorController extends ChangeNotifier {
       _editingText = _editingText!.withStyle(style) as TextAnnotation;
     }
     notifyListeners();
+    onToolSettingsChanged?.call();
   }
 
   void setSpaceHeld(bool held) {

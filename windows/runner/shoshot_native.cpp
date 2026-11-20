@@ -7,6 +7,7 @@
 #include <shellapi.h>
 #include <shellscalingapi.h>
 #include <shlobj.h>
+#include <appmodel.h>
 #include <winreg.h>
 
 #include <algorithm>
@@ -20,6 +21,7 @@
 
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Foundation.h>
+#include <winrt/Windows.ApplicationModel.h>
 #include <winrt/Windows.Globalization.h>
 #include <winrt/Windows.Graphics.Imaging.h>
 #include <winrt/Windows.Media.Ocr.h>
@@ -139,6 +141,55 @@ std::wstring WideFromUtf8(const std::string& utf8) {
                       size);
   return out;
 }
+
+// True when the process runs with package identity (installed from the
+// Microsoft Store / an MSIX), false for a plain unpackaged .exe.
+bool IsPackagedProcess() {
+  UINT32 length = 0;
+  LONG rc = GetCurrentPackageFullName(&length, nullptr);
+  return rc != APPMODEL_ERROR_NO_PACKAGE;
+}
+
+#ifdef SHOSHOT_HAS_WINRT_OCR
+// Task id declared in pubspec.yaml's msix_config.startup_task.task_id.
+constexpr wchar_t kStartupTaskId[] = L"ShowShotStartup";
+
+const char* StartupStateName(winrt::Windows::ApplicationModel::StartupTaskState
+                                 state) {
+  using winrt::Windows::ApplicationModel::StartupTaskState;
+  switch (state) {
+    case StartupTaskState::Disabled:
+      return "disabled";
+    case StartupTaskState::DisabledByUser:
+      return "disabledByUser";
+    case StartupTaskState::Enabled:
+      return "enabled";
+    case StartupTaskState::DisabledByPolicy:
+      return "disabledByPolicy";
+    case StartupTaskState::EnabledByPolicy:
+      return "enabledByPolicy";
+  }
+  return "unavailable";
+}
+
+// Reads (and, for `change`, first updates) the packaged app's startup task.
+// `change`: 0 = just read, 1 = request enable, 2 = disable. Runs off the
+// platform thread; any WinRT failure (task missing from the manifest, no
+// identity) maps to "unavailable" in the caller.
+std::string RunStartupTask(int change) {
+  using namespace winrt::Windows::ApplicationModel;
+  auto task = StartupTask::GetAsync(kStartupTaskId).get();
+  if (change == 1) {
+    // Returns DisabledByUser/DisabledByPolicy instead of enabling when the
+    // user (Task Manager / Settings) or policy turned the task off.
+    return StartupStateName(task.RequestEnableAsync().get());
+  }
+  if (change == 2) {
+    task.Disable();
+  }
+  return StartupStateName(task.State());
+}
+#endif  // SHOSHOT_HAS_WINRT_OCR
 
 template <typename T>
 T GetArg(const EncodableMap* args, const char* key, T fallback) {
@@ -347,6 +398,18 @@ void ShoShotNative::HandleMethodCall(
 #else
     result->NotImplemented();
 #endif
+  } else if (method == "isPackaged") {
+    result->Success(EncodableValue(IsPackagedProcess()));
+  } else if (method == "startupTaskState") {
+    StartupTaskCall(0, std::move(result));
+  } else if (method == "setStartupTask") {
+    StartupTaskCall(GetArg<bool>(args, "enable", false) ? 1 : 2,
+                    std::move(result));
+  } else if (method == "openSettingsUri") {
+    std::wstring uri = WideFromUtf8(GetArg<std::string>(args, "uri", ""));
+    HINSTANCE rc = ShellExecuteW(nullptr, L"open", uri.c_str(), nullptr,
+                                 nullptr, SW_SHOWNORMAL);
+    result->Success(EncodableValue(reinterpret_cast<INT_PTR>(rc) > 32));
   } else {
     result->NotImplemented();
   }
@@ -658,3 +721,29 @@ void ShoShotNative::RecognizeText(
   }).detach();
 }
 #endif  // SHOSHOT_HAS_WINRT_OCR
+
+// Replies with one of the StartupTaskState names, or "unavailable".
+void ShoShotNative::StartupTaskCall(
+    int change,
+    std::unique_ptr<flutter::MethodResult<EncodableValue>> result) {
+#ifdef SHOSHOT_HAS_WINRT_OCR
+  if (!IsPackagedProcess()) {
+    result->Success(EncodableValue(std::string("unavailable")));
+    return;
+  }
+  // StartupTask needs package identity and its async calls must not block
+  // the platform thread — same pattern as RecognizeText.
+  std::thread([change, result = std::move(result)]() mutable {
+    winrt::init_apartment(winrt::apartment_type::multi_threaded);
+    std::string state = "unavailable";
+    try {
+      state = RunStartupTask(change);
+    } catch (...) {
+    }
+    result->Success(EncodableValue(state));
+    winrt::uninit_apartment();
+  }).detach();
+#else
+  result->Success(EncodableValue(std::string("unavailable")));
+#endif
+}

@@ -28,8 +28,17 @@ Future<void> main(List<String> args) async {
   final native = NativeBridge.instance;
   final capture = CaptureService(native);
   final export = ExportService(native)
-    ..onBookmarkRefreshed = (bookmark) =>
-        settings.update((s) => s.copyWith(saveDirectoryBookmark: bookmark));
+    ..onBookmarkRefreshed = (bookmark) {
+      settings.update((s) => s.copyWith(saveDirectoryBookmark: bookmark));
+    }
+    ..onSequenceAdvanced = (next) {
+      settings.update((s) => s.copyWith(sequenceNext: next));
+    }
+    ..onSaved = (directory) {
+      if (settings.settings.lastSaveDirectory != directory) {
+        settings.update((s) => s.copyWith(lastSaveDirectory: directory));
+      }
+    };
   final ocr = OcrService(native);
   final flow = CaptureFlow(
     settings: settings,
@@ -52,7 +61,7 @@ Future<void> main(List<String> args) async {
     onSettings: flow.openSettings,
     onQuit: flow.quit,
   );
-  final startup = StartupService(settings);
+  final startup = StartupService(settings, native: native);
   final systemTheme = SystemThemeService(native);
   // Read before the first frame so the app never flashes the fallback
   // accent color before swapping to the real OS one.

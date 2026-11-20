@@ -1,12 +1,20 @@
 import 'package:flutter/services.dart';
 import 'package:hotkey_manager/hotkey_manager.dart';
 
+import '../core/theme.dart';
 import 'capture_mode.dart';
+import 'tool_memory.dart';
 
 enum ImageFormat { png, jpg }
 
 /// What happens when the user confirms a selection in the overlay with Enter.
 enum AfterCaptureAction { openEditor, copyToClipboard, saveToFile }
+
+/// How saved files are named: by capture time, or prefix + global counter.
+enum FileNaming { timestamp, sequence }
+
+/// Glue between the prefix and the counter in sequential names.
+enum NameSeparator { underscore, dash, space, none }
 
 enum AppLanguage { system, portuguese, english }
 
@@ -43,6 +51,13 @@ class AppSettings {
     this.jpgQuality = 90,
     this.saveDirectory,
     this.saveDirectoryBookmark,
+    this.saveToLastFolder = false,
+    this.lastSaveDirectory = '',
+    this.fileNaming = FileNaming.timestamp,
+    this.namePrefix = 'ShowShot',
+    this.nameSeparator = NameSeparator.underscore,
+    this.nameDigits = 2,
+    this.sequenceNext = 1,
     this.askWhereToSave = true,
     this.copyAfterSave = true,
     this.systemNotifications = true,
@@ -51,6 +66,8 @@ class AppSettings {
     this.language = AppLanguage.system,
     this.trayLeftClick = TrayAction.area,
     this.editorWindow = EditorWindowMode.maximized,
+    this.rememberTools = false,
+    this.toolMemory,
     this.recentFiles = const [],
   });
 
@@ -66,6 +83,26 @@ class AppSettings {
   /// App Sandbox needs to write there again after a relaunch.
   final String? saveDirectoryBookmark;
   final bool askWhereToSave;
+
+  /// File naming scheme; the fields below only matter for [FileNaming.sequence].
+  final FileNaming fileNaming;
+
+  /// Raw prefix as typed (sanitized when a name is built).
+  final String namePrefix;
+  final NameSeparator nameSeparator;
+
+  /// Zero-padding width of the counter, 1-5.
+  final int nameDigits;
+
+  /// Next counter value. Global: independent of the destination folder.
+  final int sequenceNext;
+
+  /// When on, saves go to [lastSaveDirectory] (falling back to the default
+  /// folder when it no longer exists).
+  final bool saveToLastFolder;
+
+  /// Directory of the most recent successful save ('' = none yet).
+  final String lastSaveDirectory;
   final bool copyAfterSave;
 
   /// Report copied/saved/text-recognized as OS notifications (instead of an
@@ -78,6 +115,13 @@ class AppSettings {
   /// Action of a left click on the menu bar / tray icon (macOS, Windows).
   final TrayAction trayLeftClick;
   final EditorWindowMode editorWindow;
+
+  /// Restore the last tool and style values when the editor opens (and keep
+  /// [toolMemory] up to date while editing). Off by default.
+  final bool rememberTools;
+
+  /// What the editor last used; kept untouched while [rememberTools] is off.
+  final ToolMemory? toolMemory;
   final List<String> recentFiles;
 
   static Map<CaptureMode, HotKey?> defaultHotKeys() => {
@@ -115,7 +159,14 @@ class AppSettings {
     String? saveDirectory,
     String? saveDirectoryBookmark,
     bool clearSaveDirectory = false,
+    FileNaming? fileNaming,
+    String? namePrefix,
+    NameSeparator? nameSeparator,
+    int? nameDigits,
+    int? sequenceNext,
     bool? askWhereToSave,
+    bool? saveToLastFolder,
+    String? lastSaveDirectory,
     bool? copyAfterSave,
     bool? systemNotifications,
     bool? showMagnifier,
@@ -123,6 +174,8 @@ class AppSettings {
     AppLanguage? language,
     TrayAction? trayLeftClick,
     EditorWindowMode? editorWindow,
+    bool? rememberTools,
+    ToolMemory? toolMemory,
     List<String>? recentFiles,
   }) {
     return AppSettings(
@@ -138,7 +191,14 @@ class AppSettings {
       saveDirectoryBookmark: clearSaveDirectory
           ? null
           : (saveDirectoryBookmark ?? this.saveDirectoryBookmark),
+      fileNaming: fileNaming ?? this.fileNaming,
+      namePrefix: namePrefix ?? this.namePrefix,
+      nameSeparator: nameSeparator ?? this.nameSeparator,
+      nameDigits: nameDigits ?? this.nameDigits,
+      sequenceNext: sequenceNext ?? this.sequenceNext,
       askWhereToSave: askWhereToSave ?? this.askWhereToSave,
+      saveToLastFolder: saveToLastFolder ?? this.saveToLastFolder,
+      lastSaveDirectory: lastSaveDirectory ?? this.lastSaveDirectory,
       copyAfterSave: copyAfterSave ?? this.copyAfterSave,
       systemNotifications: systemNotifications ?? this.systemNotifications,
       showMagnifier: showMagnifier ?? this.showMagnifier,
@@ -146,6 +206,8 @@ class AppSettings {
       language: language ?? this.language,
       trayLeftClick: trayLeftClick ?? this.trayLeftClick,
       editorWindow: editorWindow ?? this.editorWindow,
+      rememberTools: rememberTools ?? this.rememberTools,
+      toolMemory: toolMemory ?? this.toolMemory,
       recentFiles: recentFiles ?? this.recentFiles,
     );
   }
@@ -162,7 +224,14 @@ class AppSettings {
     'jpgQuality': jpgQuality,
     'saveDirectory': saveDirectory,
     'saveDirectoryBookmark': saveDirectoryBookmark,
+    'fileNaming': fileNaming.name,
+    'namePrefix': namePrefix,
+    'nameSeparator': nameSeparator.name,
+    'nameDigits': nameDigits,
+    'sequenceNext': sequenceNext,
     'askWhereToSave': askWhereToSave,
+    'saveToLastFolder': saveToLastFolder,
+    'lastSaveDirectory': lastSaveDirectory,
     'copyAfterSave': copyAfterSave,
     'systemNotifications': systemNotifications,
     'showMagnifier': showMagnifier,
@@ -170,6 +239,8 @@ class AppSettings {
     'language': language.name,
     'trayLeftClick': trayLeftClick.name,
     'editorWindow': editorWindow.name,
+    'rememberTools': rememberTools,
+    'toolMemory': toolMemory?.toJson(),
     'recentFiles': recentFiles,
   };
 
@@ -199,7 +270,24 @@ class AppSettings {
       jpgQuality: (json['jpgQuality'] as num?)?.toInt() ?? 90,
       saveDirectory: json['saveDirectory'] as String?,
       saveDirectoryBookmark: json['saveDirectoryBookmark'] as String?,
+      fileNaming: FileNaming.values.byNameOr(
+        json['fileNaming'],
+        FileNaming.timestamp,
+      ),
+      namePrefix: json['namePrefix'] as String? ?? 'ShowShot',
+      nameSeparator: NameSeparator.values.byNameOr(
+        json['nameSeparator'],
+        NameSeparator.underscore,
+      ),
+      nameDigits: _atLeast(
+        1,
+        (json['nameDigits'] as num?)?.toInt() ?? 2,
+        max: 5,
+      ),
+      sequenceNext: _atLeast(1, (json['sequenceNext'] as num?)?.toInt() ?? 1),
       askWhereToSave: json['askWhereToSave'] as bool? ?? true,
+      saveToLastFolder: json['saveToLastFolder'] as bool? ?? false,
+      lastSaveDirectory: json['lastSaveDirectory'] as String? ?? '',
       copyAfterSave: json['copyAfterSave'] as bool? ?? true,
       systemNotifications: json['systemNotifications'] as bool? ?? true,
       showMagnifier: json['showMagnifier'] as bool? ?? true,
@@ -219,10 +307,21 @@ class AppSettings {
         json['editorWindow'],
         EditorWindowMode.maximized,
       ),
+      rememberTools: json['rememberTools'] as bool? ?? false,
+      toolMemory: json['toolMemory'] is Map
+          ? ToolMemory.fromJson(
+              (json['toolMemory'] as Map).cast<String, dynamic>(),
+              AppColors.palette.first.toARGB32(),
+            )
+          : null,
       recentFiles: (json['recentFiles'] as List?)?.cast<String>() ?? const [],
     );
   }
 }
+
+/// Clamps [value] to [min]..[max] while keeping the static type `int`.
+int _atLeast(int min, int value, {int max = 1 << 30}) =>
+    value < min ? min : (value > max ? max : value);
 
 extension _EnumByName<T extends Enum> on Iterable<T> {
   T byNameOr(Object? name, T fallback) {

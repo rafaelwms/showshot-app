@@ -8,6 +8,7 @@ import 'package:image/image.dart' as img;
 
 import '../models/annotation.dart';
 import '../models/app_settings.dart';
+import 'file_namer.dart';
 import 'native_bridge.dart';
 
 /// Renders, encodes, copies and saves screenshots.
@@ -108,16 +109,32 @@ class ExportService {
     );
   }
 
-  static String defaultFileName(ImageFormat format, [DateTime? when]) {
-    final t = when ?? DateTime.now();
-    String two(int v) => v.toString().padLeft(2, '0');
-    final stamp =
-        '${t.year}-${two(t.month)}-${two(t.day)}_${two(t.hour)}-${two(t.minute)}-${two(t.second)}';
-    return 'ShowShot_$stamp.${format.name}';
+  static String defaultFileName(ImageFormat format, [DateTime? when]) =>
+      FileNamer.timestampName(format.name, when ?? DateTime.now());
+
+  /// Called with the new counter value after a save that consumed a
+  /// sequential number, so the caller can persist it as `sequenceNext`.
+  void Function(int next)? onSequenceAdvanced;
+
+  /// Next file name for [dir] according to [settings] (skips taken numbers).
+  static Future<GeneratedName> _nextName(AppSettings settings, Directory dir) {
+    return FileNamer.next(
+      settings: settings,
+      now: DateTime.now(),
+      exists: (name) =>
+          File('${dir.path}${Platform.pathSeparator}$name').exists(),
+    );
   }
 
-  /// `~/Pictures/ShowShot` (created on demand).
-  static Future<Directory> defaultDirectory() async {
+  /// File name without directory or extension, for either separator style.
+  static String _stem(String path) {
+    final base = path.split(RegExp(r'[\\/]')).last;
+    final dot = base.lastIndexOf('.');
+    return dot <= 0 ? base : base.substring(0, dot);
+  }
+
+  /// `~/Pictures/ShowShot` path, without touching the disk.
+  static Future<String> defaultDirectoryPath() async {
     final home =
         Platform.environment['HOME'] ??
         Platform.environment['USERPROFILE'] ??
@@ -130,9 +147,43 @@ class ExportService {
         if (result.exitCode == 0 && path.isNotEmpty) pictures = Directory(path);
       } catch (_) {}
     }
-    final dir = Directory('${pictures.path}${Platform.pathSeparator}ShowShot');
+    return '${pictures.path}${Platform.pathSeparator}ShowShot';
+  }
+
+  /// `~/Pictures/ShowShot` (created on demand).
+  static Future<Directory> defaultDirectory() async {
+    final dir = Directory(await defaultDirectoryPath());
     if (!await dir.exists()) await dir.create(recursive: true);
     return dir;
+  }
+
+  /// Picks the folder a save goes to. Pure apart from the injected [exists] /
+  /// [create] callbacks, so it can be unit-tested with fake file systems.
+  ///
+  /// Order: the last used folder (only when [useLastFolder]) -> the configured
+  /// folder -> the built-in default, which is created when missing.
+  static Future<String> resolveSaveDirectoryPath({
+    required bool useLastFolder,
+    required String? lastDirectory,
+    required String? configuredDirectory,
+    required Future<String> Function() builtInDefault,
+    required Future<bool> Function(String path) exists,
+    required Future<void> Function(String path) create,
+  }) async {
+    if (useLastFolder &&
+        lastDirectory != null &&
+        lastDirectory.isNotEmpty &&
+        await exists(lastDirectory)) {
+      return lastDirectory;
+    }
+    if (configuredDirectory != null &&
+        configuredDirectory.isNotEmpty &&
+        await exists(configuredDirectory)) {
+      return configuredDirectory;
+    }
+    final fallback = await builtInDefault();
+    if (!await exists(fallback)) await create(fallback);
+    return fallback;
   }
 
   /// Called with a fresh base64 bookmark when macOS reports the stored one as
@@ -143,14 +194,33 @@ class ExportService {
   String? _resolvedBookmark;
   String? _resolvedPath;
 
-  Future<Directory> targetDirectory(AppSettings settings) async {
+  /// Called with the directory of every successful save, so the caller can
+  /// persist it as `lastSaveDirectory`.
+  void Function(String directory)? onSaved;
+
+  /// Folder for the next save. [ignoreLast] skips the "last used folder" step
+  /// (used to retry after a write to it failed).
+  Future<Directory> targetDirectory(
+    AppSettings settings, {
+    bool ignoreLast = false,
+  }) async {
     final custom = settings.saveDirectory;
+    String? configured;
     if (custom != null && custom.isNotEmpty) {
-      final path = await _sandboxAccessiblePath(settings) ?? custom;
-      final dir = Directory(path);
-      if (await dir.exists()) return dir;
+      // Also re-activates the sandbox bookmark for this launch.
+      configured = await _sandboxAccessiblePath(settings) ?? custom;
     }
-    return defaultDirectory();
+    final path = await resolveSaveDirectoryPath(
+      useLastFolder: settings.saveToLastFolder && !ignoreLast,
+      lastDirectory: settings.lastSaveDirectory,
+      configuredDirectory: configured,
+      builtInDefault: defaultDirectoryPath,
+      exists: (p) => Directory(p).exists(),
+      create: (p) async {
+        await Directory(p).create(recursive: true);
+      },
+    );
+    return Directory(path);
   }
 
   /// macOS/App Sandbox: re-opens access to the custom folder through its
@@ -184,10 +254,15 @@ class ExportService {
   }) async {
     var format = settings.saveFormat;
     String path;
-    if (settings.askWhereToSave || forceDialog) {
+    final dialogUsed = settings.askWhereToSave || forceDialog;
+    // Counter value this save consumes (null: timestamp name, or the user
+    // typed a different name in the Save As dialog).
+    int? consumed;
+    if (dialogUsed) {
       final dir = await targetDirectory(settings);
+      final suggested = await _nextName(settings, dir);
       final location = await getSaveLocation(
-        suggestedName: defaultFileName(format),
+        suggestedName: suggested.name,
         initialDirectory: dir.path,
         acceptedTypeGroups: const [
           XTypeGroup(
@@ -204,6 +279,9 @@ class ExportService {
       );
       if (location == null) return null;
       path = location.path;
+      // Only advance the counter when the user kept the suggested name
+      // (extension changes don't matter); a custom name leaves it alone.
+      if (_stem(path) == _stem(suggested.name)) consumed = suggested.usedNumber;
       final lower = path.toLowerCase();
       if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) {
         format = ImageFormat.jpg;
@@ -214,12 +292,33 @@ class ExportService {
       }
     } else {
       final dir = await targetDirectory(settings);
-      path = '${dir.path}${Platform.pathSeparator}${defaultFileName(format)}';
+      final generated = await _nextName(settings, dir);
+      consumed = generated.usedNumber;
+      path = '${dir.path}${Platform.pathSeparator}${generated.name}';
     }
     final bytes = format == ImageFormat.jpg
         ? await encodeJpg(image, settings.jpgQuality)
         : await encodePng(image);
-    await File(path).writeAsBytes(bytes, flush: true);
+    try {
+      await File(path).writeAsBytes(bytes, flush: true);
+    } on FileSystemException {
+      // Quick save into the last used folder can fail (e.g. macOS sandbox:
+      // no bookmark for it after a relaunch). Retry silently in the default
+      // folder; any other failure still propagates.
+      if (dialogUsed ||
+          !settings.saveToLastFolder ||
+          settings.lastSaveDirectory.isEmpty) {
+        rethrow;
+      }
+      final dir = await targetDirectory(settings, ignoreLast: true);
+      // The fallback folder may already hold the number: pick again there.
+      final generated = await _nextName(settings, dir);
+      consumed = generated.usedNumber;
+      path = '${dir.path}${Platform.pathSeparator}${generated.name}';
+      await File(path).writeAsBytes(bytes, flush: true);
+    }
+    if (consumed != null) onSequenceAdvanced?.call(consumed + 1);
+    onSaved?.call(File(path).parent.path);
     return path;
   }
 }

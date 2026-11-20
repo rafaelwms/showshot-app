@@ -42,7 +42,17 @@ msix_config:
   logo_path: artwork/Icon Light.png
   languages: en-us, pt-br
   capabilities: runFullTrust
+  # uap10:Parameters on the startup task (passes --autostart) needs Windows 10
+  # 2004 (19041); msix defaults to 17763.
+  os_min_version: 10.0.19041.0
   store: true
+  # Packaged apps can't use the HKCU Run key (writes are virtualized into the
+  # package's private hive), so "Launch at startup" goes through this
+  # StartupTask (see StartupService). Off by default: opt-in from Settings.
+  startup_task:
+    task_id: ShowShotStartup
+    enabled: false
+    parameters: --autostart
   # For local sideload testing only (not needed for the Store submission
   # build): comment out `store: true` above and set `install_certificate:
   # false`, run `dart run msix:create`, then — from an ELEVATED PowerShell —

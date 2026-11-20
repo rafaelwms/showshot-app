@@ -55,6 +55,8 @@ abstract class Strings {
   String get editorWindowNormal;
   String get editorWindowMaximized;
   String get editorWindowFullScreen;
+  String get rememberTools;
+  String get rememberToolsHint;
   String get hideWindow;
 
   // Overlay
@@ -120,6 +122,9 @@ abstract class Strings {
   String get sectionAbout;
   String get launchAtStartup;
   String get launchAtStartupHint;
+  String get launchAtStartupBlockedByUser;
+  String get launchAtStartupBlockedByPolicy;
+  String get openStartupSettings;
   String get showDockIcon;
   String get showDockIconHint;
   String get showTaskbarIcon;
@@ -140,6 +145,19 @@ abstract class Strings {
   String get chooseFolder;
   String get askWhereToSave;
   String get askWhereToSaveHint;
+  String get saveToLastFolder;
+  String get saveToLastFolderHint;
+  String get fileNaming;
+  String get fileNamingTimestamp;
+  String get fileNamingSequence;
+  String get namePrefix;
+  String get nameSeparator;
+  String get separatorSpace;
+  String get separatorNone;
+  String get nameDigits;
+  String get nextFile;
+  String get resetCounter;
+  String get counterHint;
   String get copyAfterSave;
   String get copyAfterSaveHint;
   String get systemNotifications;
@@ -232,6 +250,11 @@ class _Pt extends Strings {
   String get editorWindowMaximized => 'Maximizada';
   @override
   String get editorWindowFullScreen => 'Tela cheia';
+  @override
+  String get rememberTools => 'Lembrar ajustes das ferramentas';
+  @override
+  String get rememberToolsHint =>
+      'Cor, espessura e a última ferramenta usada voltam na próxima captura.';
   @override
   String get hideWindow => 'Ocultar janela';
 
@@ -355,6 +378,17 @@ class _Pt extends Strings {
   String get launchAtStartupHint =>
       'Abre o Show Shot silenciosamente ao fazer login.';
   @override
+  String get launchAtStartupBlockedByUser =>
+      'O Windows bloqueou a inicialização automática porque ela foi '
+      'desativada nas Configurações. Ative o Show Shot em Configurações > '
+      'Aplicativos > Inicialização.';
+  @override
+  String get launchAtStartupBlockedByPolicy =>
+      'A inicialização automática está bloqueada por uma política da sua '
+      'organização.';
+  @override
+  String get openStartupSettings => 'Abrir Configurações do Windows';
+  @override
   String get showDockIcon => 'Mostrar ícone no Dock';
   @override
   String get showDockIconHint =>
@@ -405,6 +439,33 @@ class _Pt extends Strings {
   @override
   String get askWhereToSaveHint =>
       'Desligado: salva direto na pasta de destino.';
+  @override
+  String get saveToLastFolder => 'Salvar na última pasta usada';
+  @override
+  String get saveToLastFolderHint =>
+      'Se a pasta não existir mais, usa a pasta padrão.';
+  @override
+  String get fileNaming => 'Nome dos arquivos';
+  @override
+  String get fileNamingTimestamp => 'Data e hora';
+  @override
+  String get fileNamingSequence => 'Sequencial';
+  @override
+  String get namePrefix => 'Prefixo';
+  @override
+  String get nameSeparator => 'Separador';
+  @override
+  String get separatorSpace => 'Espaço';
+  @override
+  String get separatorNone => 'Nenhum';
+  @override
+  String get nameDigits => 'Dígitos do contador';
+  @override
+  String get nextFile => 'Próximo arquivo';
+  @override
+  String get resetCounter => 'Zerar contador';
+  @override
+  String get counterHint => 'O contador é global; use Zerar para recomeçar.';
   @override
   String get copyAfterSave => 'Copiar ao salvar';
   @override
@@ -523,6 +584,11 @@ class _En extends Strings {
   String get editorWindowMaximized => 'Maximized';
   @override
   String get editorWindowFullScreen => 'Full screen';
+  @override
+  String get rememberTools => 'Remember tool settings';
+  @override
+  String get rememberToolsHint =>
+      'Color, width and the last tool used come back on the next capture.';
   @override
   String get hideWindow => 'Hide window';
 
@@ -646,6 +712,15 @@ class _En extends Strings {
   String get launchAtStartupHint =>
       'Starts Show Shot silently when you sign in.';
   @override
+  String get launchAtStartupBlockedByUser =>
+      'Windows blocked launch at startup because it was turned off in '
+      'Settings. Turn Show Shot on in Settings > Apps > Startup.';
+  @override
+  String get launchAtStartupBlockedByPolicy =>
+      'Launch at startup is blocked by your organization\'s policy.';
+  @override
+  String get openStartupSettings => 'Open Windows Settings';
+  @override
   String get showDockIcon => 'Show Dock icon';
   @override
   String get showDockIconHint =>
@@ -695,6 +770,33 @@ class _En extends Strings {
   @override
   String get askWhereToSaveHint =>
       'Off: saves straight into the destination folder.';
+  @override
+  String get saveToLastFolder => 'Save to the last used folder';
+  @override
+  String get saveToLastFolderHint =>
+      'If the folder no longer exists, uses the default folder.';
+  @override
+  String get fileNaming => 'File names';
+  @override
+  String get fileNamingTimestamp => 'Date and time';
+  @override
+  String get fileNamingSequence => 'Sequential';
+  @override
+  String get namePrefix => 'Prefix';
+  @override
+  String get nameSeparator => 'Separator';
+  @override
+  String get separatorSpace => 'Space';
+  @override
+  String get separatorNone => 'None';
+  @override
+  String get nameDigits => 'Counter digits';
+  @override
+  String get nextFile => 'Next file';
+  @override
+  String get resetCounter => 'Reset counter';
+  @override
+  String get counterHint => 'The counter is global; use Reset to start over.';
   @override
   String get copyAfterSave => 'Copy when saving';
   @override

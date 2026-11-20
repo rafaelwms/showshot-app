@@ -42,6 +42,11 @@ class ShoShotNative {
       std::vector<uint8_t> png,
       std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
   bool ShowNotification(const std::string& title, const std::string& body);
+  // MSIX StartupTask access. change: 0 = read state, 1 = request enable,
+  // 2 = disable. Replies with the state name (or "unavailable").
+  void StartupTaskCall(
+      int change,
+      std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
 
  public:
   // Called by FlutterWindow::MessageHandler on WM_SETTINGCHANGE /
