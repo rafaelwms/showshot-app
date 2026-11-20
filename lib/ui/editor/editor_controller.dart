@@ -21,13 +21,8 @@ class EditorController extends ChangeNotifier {
     ToolType? initialTool,
     AnnotationStyle? initialStyle,
   }) : _tool = initialTool ?? ToolType.arrow,
-       _style =
-           initialStyle ??
-           AnnotationStyle(
-             color: AppColors.palette.first,
-             strokeWidth: (3 * pixelRatio).roundToDouble(),
-             fontSize: (20 * pixelRatio).roundToDouble(),
-           ),
+       _style = initialStyle ?? _defaultStyle(pixelRatio),
+       _rememberedStyle = initialStyle ?? _defaultStyle(pixelRatio),
        _ocrDraftStyle = AnnotationStyle(
          color: AppColors.cyan,
          strokeWidth: (2 * pixelRatio).roundToDouble(),
@@ -61,6 +56,11 @@ class EditorController extends ChangeNotifier {
 
   ToolType _tool;
   AnnotationStyle _style;
+
+  /// The last style the user chose explicitly ([setStyle]), for "Remember
+  /// tool settings". Unlike [_style] it is not touched when selecting or
+  /// resizing an annotation syncs the properties bar to that annotation.
+  AnnotationStyle _rememberedStyle;
   String? _selectedId;
   Annotation? _draft;
   int _numberCounter = 1;
@@ -86,6 +86,13 @@ class EditorController extends ChangeNotifier {
   List<Annotation> get annotations => _annotations;
   ToolType get tool => _tool;
   AnnotationStyle get style => _style;
+  AnnotationStyle get rememberedStyle => _rememberedStyle;
+
+  static AnnotationStyle _defaultStyle(double pixelRatio) => AnnotationStyle(
+    color: AppColors.palette.first,
+    strokeWidth: (3 * pixelRatio).roundToDouble(),
+    fontSize: (20 * pixelRatio).roundToDouble(),
+  );
   String? get selectedId => _selectedId;
   Annotation? get draft => _draft;
   TextAnnotation? get editingText => _editingText;
@@ -136,6 +143,7 @@ class EditorController extends ChangeNotifier {
 
   void setStyle(AnnotationStyle style) {
     _style = style;
+    _rememberedStyle = style;
     final current = selected;
     if (current != null) {
       _pushHistory();

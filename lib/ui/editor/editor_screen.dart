@@ -42,31 +42,39 @@ class _EditorScreenState extends State<EditorScreen> {
   Timer? _rememberTimer;
   SettingsService? _settingsService;
 
-  /// Persists the current tool/style right away (no-op when the option is
-  /// off or nothing changed). Called by the debounce timer and on dispose.
-  void _flushToolMemory() {
+  /// Persists the current tool/style right away and returns the memory the
+  /// next editor should start from. No-op (returns the stored memory) when
+  /// the option is off or nothing explicit changed since the last write.
+  /// Called by the debounce timer, on document replacement and on dispose.
+  ToolMemory? _flushToolMemory() {
+    final pending = _rememberTimer != null;
     _rememberTimer?.cancel();
     _rememberTimer = null;
     final controller = _controller;
     final service = _settingsService;
-    if (controller == null || service == null) return;
+    if (service == null) return null;
     final current = service.settings;
-    if (!current.rememberTools) return;
+    if (!current.rememberTools) return null;
+    // Only explicit changes (setTool/setStyle schedule the timer) are saved;
+    // rememberedStyle ignores style syncs from selecting an annotation.
+    if (controller == null || !pending) return current.toolMemory;
     final next = ToolMemory.capture(
       previous: current.toolMemory,
       tool: controller.tool,
-      style: controller.style,
+      style: controller.rememberedStyle,
       pixelRatio: controller.pixelRatio,
     );
-    if (next.sameAs(current.toolMemory)) return;
+    if (next.sameAs(current.toolMemory)) return next;
     // Deferred: this can run while the widget tree is being built/torn down
     // (didChangeDependencies, dispose), and SettingsService notifies
-    // listeners (Home/Settings ListenableBuilders) synchronously.
+    // listeners (Home/Settings ListenableBuilders) synchronously. Callers that
+    // need the value now use the returned memory instead of re-reading prefs.
     Future.microtask(() {
       service.update((s) {
         return s.rememberTools ? s.copyWith(toolMemory: next) : s;
       });
     });
+    return next;
   }
 
   void _scheduleToolMemory() {
@@ -83,10 +91,8 @@ class _EditorScreenState extends State<EditorScreen> {
     final document = services.flow.document;
     if (document != null &&
         (_controller == null || _controller!.image != document.image)) {
-      _flushToolMemory();
+      final memory = _flushToolMemory();
       _controller?.dispose();
-      final settings = services.settings.settings;
-      final memory = settings.rememberTools ? settings.toolMemory : null;
       _controller = EditorController(
         image: document.image,
         pixelRatio: document.pixelRatio,
