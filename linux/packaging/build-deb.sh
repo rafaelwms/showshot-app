@@ -39,6 +39,16 @@ for arg in "$@"; do
   esac
 done
 
+missing=()
+for tool in dpkg-deb dpkg-shlibdeps patchelf strip; do
+  command -v "$tool" >/dev/null || missing+=("$tool")
+done
+if ((${#missing[@]})); then
+  echo "missing tools: ${missing[*]}" >&2
+  echo "install them with: sudo apt-get install dpkg-dev patchelf binutils" >&2
+  exit 1
+fi
+
 version="$(sed -n 's/^version: *\([0-9][0-9.]*\).*/\1/p' pubspec.yaml)"
 arch="$(dpkg --print-architecture)"
 case "$arch" in

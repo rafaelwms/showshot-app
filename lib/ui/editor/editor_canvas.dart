@@ -175,18 +175,17 @@ class StampOverlayPainter extends CustomPainter {
     if (pointer != null) {
       // Brush outline: the nominal diameter, dark + light so it reads on any
       // content.
-      final radius = controller.style.brushSize / 2;
-      canvas.drawCircle(
-        pointer,
-        radius,
+      // Bézier path, not drawCircle: see bezierOval (Linux Impeller GLES).
+      final ring = bezierCircle(pointer, controller.style.brushSize / 2);
+      canvas.drawPath(
+        ring,
         Paint()
           ..color = Colors.black.withValues(alpha: 0.6)
           ..style = PaintingStyle.stroke
           ..strokeWidth = 2.5 * inv,
       );
-      canvas.drawCircle(
-        pointer,
-        radius,
+      canvas.drawPath(
+        ring,
         Paint()
           ..color = Colors.white
           ..style = PaintingStyle.stroke
@@ -202,7 +201,7 @@ class StampOverlayPainter extends CustomPainter {
     final r = 8 * inv;
     final arm = 13 * inv;
     void draw(Paint paint) {
-      canvas.drawCircle(c, r, paint);
+      canvas.drawPath(bezierCircle(c, r), paint);
       canvas.drawLine(c - Offset(arm, 0), c + Offset(arm, 0), paint);
       canvas.drawLine(c - Offset(0, arm), c + Offset(0, arm), paint);
     }

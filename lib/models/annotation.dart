@@ -306,6 +306,32 @@ abstract class Annotation {
     ..isAntiAlias = true;
 }
 
+/// An ellipse inscribed in [r] as four cubic Bézier quarter arcs
+/// (κ = 4/3·(√2−1); max radial error ≈ 0.03%).
+///
+/// Use this — not `canvas.drawOval`/`drawCircle`/`Path.addOval` — for
+/// anything that ends up in the image: Impeller's OpenGL ES backend (Linux,
+/// "OpenGLESSDF") renders recognized ovals and circles of any real size as a
+/// broken shape (solid blocks at the corners/centre, square "rings"), filled
+/// or stroked. A Bézier path is an ordinary path, tessellated like arrows and
+/// pen strokes, and looks the same on every platform.
+Path bezierOval(Rect r) {
+  const kappa = 0.5522847498;
+  final cx = r.center.dx, cy = r.center.dy;
+  final rx = r.width / 2, ry = r.height / 2;
+  final ox = rx * kappa, oy = ry * kappa;
+  return Path()
+    ..moveTo(cx + rx, cy)
+    ..cubicTo(cx + rx, cy + oy, cx + ox, cy + ry, cx, cy + ry)
+    ..cubicTo(cx - ox, cy + ry, cx - rx, cy + oy, cx - rx, cy)
+    ..cubicTo(cx - rx, cy - oy, cx - ox, cy - ry, cx, cy - ry)
+    ..cubicTo(cx + ox, cy - ry, cx + rx, cy - oy, cx + rx, cy)
+    ..close();
+}
+
+Path bezierCircle(Offset center, double radius) =>
+    bezierOval(Rect.fromCircle(center: center, radius: radius));
+
 enum ShapeKind { arrow, line, rect, ellipse, blur }
 
 /// Two-point shapes: arrows, lines, rectangles, ellipses and blur regions.
@@ -488,11 +514,11 @@ class ShapeAnnotation extends Annotation {
           canvas.drawRRect(rrect, strokePaint());
         }
       case ShapeKind.ellipse:
-        if (style.filled) {
-          canvas.drawOval(rect, fillPaint());
-        } else {
-          canvas.drawOval(rect, strokePaint());
-        }
+        // See bezierOval: drawOval breaks on Linux (Impeller GLES).
+        canvas.drawPath(
+          bezierOval(rect),
+          style.filled ? fillPaint() : strokePaint(),
+        );
       case ShapeKind.blur:
         _paintBlur(canvas, source);
     }
@@ -503,7 +529,7 @@ class ShapeAnnotation extends Annotation {
     final length = vector.distance;
     final paint = strokePaint();
     if (length < 1) {
-      canvas.drawCircle(start, style.strokeWidth / 2, fillPaint());
+      canvas.drawPath(bezierCircle(start, style.strokeWidth / 2), fillPaint());
       return;
     }
     final unit = vector / length;
@@ -768,7 +794,10 @@ class StrokeAnnotation extends Annotation {
         ..strokeCap = StrokeCap.square;
     }
     if (points.length == 1) {
-      canvas.drawCircle(points.first, _width / 2, Paint()..color = paint.color);
+      canvas.drawPath(
+        bezierCircle(points.first, _width / 2),
+        Paint()..color = paint.color,
+      );
       return;
     }
     final path = Path()..moveTo(points.first.dx, points.first.dy);
@@ -980,17 +1009,17 @@ class NumberAnnotation extends Annotation {
 
   @override
   void paintLocal(Canvas canvas, ui.Image? source) {
-    canvas.drawCircle(
-      center,
-      radius,
+    // Bézier circles, not drawCircle: see bezierOval.
+    final circle = bezierCircle(center, radius);
+    canvas.drawPath(
+      circle,
       Paint()
         ..color = const Color(0x55000000)
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
     );
-    canvas.drawCircle(center, radius, fillPaint());
-    canvas.drawCircle(
-      center,
-      radius,
+    canvas.drawPath(circle, fillPaint());
+    canvas.drawPath(
+      circle,
       Paint()
         ..color = const Color(0xFFFFFFFF).withValues(alpha: 0.9 * style.opacity)
         ..style = PaintingStyle.stroke
@@ -1209,7 +1238,7 @@ class StampAnnotation extends Annotation {
       ..isAntiAlias = true;
     if (sigma > 0) mask.maskFilter = MaskFilter.blur(BlurStyle.normal, sigma);
     if (points.length == 1) {
-      canvas.drawCircle(points.first, core / 2, mask);
+      canvas.drawPath(bezierCircle(points.first, core / 2), mask);
     } else {
       mask
         ..style = PaintingStyle.stroke
