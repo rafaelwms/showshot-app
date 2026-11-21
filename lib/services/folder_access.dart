@@ -1,5 +1,3 @@
-import 'dart:io';
-
 /// Pure decisions about macOS sandbox folder permissions (unit-tested).
 class FolderAccess {
   const FolderAccess._();
@@ -18,8 +16,11 @@ class FolderAccess {
     final p = normalize(path);
     final r = normalize(root);
     if (r.isEmpty) return false;
-    final prefix = r.endsWith('/') ? r : '$r${Platform.pathSeparator}';
-    return p == r || p.startsWith(prefix);
+    if (p == r) return true;
+    // Either separator, so the logic (and its tests) don't depend on the
+    // platform running them; only macOS calls this in the app.
+    if (r.endsWith('/') || r.endsWith('\\')) return p.startsWith(r);
+    return p.startsWith('$r/') || p.startsWith('$r\\');
   }
 
   /// Whether to show the "allow this folder" panel after a Save As into
