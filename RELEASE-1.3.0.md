@@ -21,7 +21,8 @@ Registro combinado com o Rafael em 2026-11-20. Status: `[ ]` pendente, `[~]` em 
 
 ## Melhorias
 
-- [~] **M1 — Editor: ferramenta Crop.** Corte seletivo pelo usuário; proporções fixas (1:1, 3:4, 4:3, 16:9 …) e Custom (livre).
+- [x] **M1 — Editor: ferramenta Crop.** Corte seletivo pelo usuário; proporções fixas (1:1, 3:4, 4:3, 16:9 …) e Custom (livre).
+  - ✅ 2026-11-21 aprovado pelo Rafael no macOS ("ferramenta completa").
   - Implementado em 2026-11-21, falta compilar e testar manualmente: `ToolType.crop` (tecla `C`, transitória), `lib/models/crop.dart` (lógica pura), histórico com imagem (`UndoHistory` + `EditorSnapshot`), recorte de anotações que cruzam a borda (clip no canvas e no `ExportService.render`), debug `croprect`/`cropratio`/`cropapply`/`cropcancel`, testes em `test/crop_test.dart`.
 - [x] **M2 — Configurações/Editor: lembrar ajustes das ferramentas.** Opção liga/desliga para guardar cor, espessura (e demais estilos) e **última ferramenta usada**.
   - ✅ 2026-11-20 testado no Windows arm64 (MSIX 1.2.0.2/1.2.0.3).
@@ -38,11 +39,13 @@ Registro combinado com o Rafael em 2026-11-20. Status: `[ ]` pendente, `[~]` em 
 - [x] **M3/M5 — Correções (2026-11-21)** ✅ testadas no macOS pelo Rafael. (a) Ações sem janela (todas as telas, salvar direto/copiar/extrair texto da overlay): se a notificação do SO não foi entregue, a Home é aberta para mostrar o toast (`_reportHeadless`). (b) macOS sandbox: "última pasta usada" sobrevive ao relançamento (`lastSaveDirectoryBookmark`, `requestFolderAccess` nativo com painel "Permitir" após Salvar Como, vários escopos ativos; testes em `test/save_directory_test.dart`).
 
 - [~] **M6 — Editor: ferramenta Carimbo (clone stamp, estilo Photoshop).** Alt/Option+clique define a origem; ao pintar, copia da origem mantendo o deslocamento (modo alinhado). Tamanho do pincel e dureza (borda suave). Não destrutivo, com undo, editável/selecionável como as demais anotações.
+  - Implementado; testar no Windows arm64 com o pacote final da release.
   - Implementado em 2026-11-21, falta compilar e testar manualmente: `ToolType.stamp` (tecla `S`), `StampAnnotation` + `StampSourceState` (`annotation.dart`), `AnnotationStyle.brushSize/hardness` (+ `ToolMemory`), debug `stampsource`/`stampstyle`, testes em `test/stamp_test.dart`.
 - [x] **M7 — Editor: alinhamento do texto.** Esquerda/centro/direita (justificar a decidir) na ferramenta Texto e alterável pela ferramenta Seleção (barra de propriedades).
   - ✅ 2026-11-21 aprovado pelo Rafael no Windows arm64 (MSIX 1.2.0.4).
   - Implementado em 2026-11-21, falta compilar e testar manualmente: `AnnotationStyle.textAlign` (+ `ToolMemory`), controle de 3 botões na barra, `TextField.textAlign`, `align` no debug server; justificar fora do escopo.
 - [~] **M8 — Editor: ícones homogêneos.** Uma única família de ícones, mesmo peso, grade e tamanho óptico, substituindo a mistura atual (Material + pintados à mão, ex.: `_CursorIcon`).
+  - Implementado; testar no Windows arm64 com o pacote final da release.
   - Decisão 2026-11-21: Phosphor **Regular** como padrão + opção "Ícones em negrito" (Phosphor Bold). Prévia aprovada: https://claude.ai/artifact/RAHtohWtmzvKs7izxXZiWF
   - Implementado em 2026-11-21, falta `flutter pub get`, compilar e testar visualmente: `lib/core/app_icons.dart` (`AppIcons` + tamanhos ópticos), `phosphor_flutter`, `AppSettings.boldIcons` (Configurações > Geral, debug `setting boldIcons`), editor/overlay/barra de título migrados; Home/Configurações seguem Material.
 
