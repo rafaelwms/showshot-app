@@ -142,6 +142,13 @@ void main() {
     expect(ToolMemory.fromJson({'tool': 'ocr'}, 0xFF000000).toolType, isNull);
   });
 
+  test('crop is transient too', () {
+    final prev = _capture(tool: ToolType.rect);
+    expect(_capture(previous: prev, tool: ToolType.crop).tool, 'rect');
+    expect(_capture(tool: ToolType.crop).toolType, isNull);
+    expect(ToolMemory.fromJson({'tool': 'crop'}, 0xFF000000).toolType, isNull);
+  });
+
   test('restored values are clamped to the slider ranges', () {
     final m = ToolMemory.fromJson({
       'strokeWidth': 500,

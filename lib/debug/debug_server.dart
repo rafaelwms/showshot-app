@@ -12,6 +12,7 @@ import '../models/app_settings.dart';
 import '../models/annotation.dart';
 import '../models/capture_mode.dart';
 import '../models/capture_session.dart';
+import '../models/crop.dart';
 import '../models/display_info.dart';
 import '../services/export_service.dart';
 import '../ui/editor/editor_controller.dart';
@@ -235,6 +236,47 @@ class DebugCommandServer {
           if (align == null) return 'usage: align left|center|right';
           editor.setStyle(editor.style.copyWith(textAlign: align));
           return 'ok';
+        case 'croprect':
+          // `croprect x y w h`: the crop rectangle (image pixels), clamped.
+          // Needs `tool crop` first.
+          final editor = DebugHooks.editor;
+          if (editor == null) return 'no editor';
+          if (!editor.isCropping) return 'not cropping (tool crop first)';
+          final n = parts.skip(1).map(double.tryParse).toList();
+          if (n.length != 4 || n.contains(null)) {
+            return 'usage: croprect x y w h';
+          }
+          editor.setCropRect(Rect.fromLTWH(n[0]!, n[1]!, n[2]!, n[3]!));
+          final r = editor.cropRect!;
+          return 'ok croprect=${r.left.round()},${r.top.round()},'
+              '${r.width.round()}x${r.height.round()}';
+        case 'cropratio':
+          // `cropratio free|1:1|4:3|3:4|16:9|9:16|original`: picks a preset
+          // and re-fits the rect to it.
+          final editor = DebugHooks.editor;
+          if (editor == null) return 'no editor';
+          if (!editor.isCropping) return 'not cropping (tool crop first)';
+          final ratio = CropRatioValue.fromToken(parts.elementAtOrNull(1));
+          if (ratio == null) {
+            return 'usage: cropratio free|1:1|4:3|3:4|16:9|9:16|original';
+          }
+          editor.setCropRatio(ratio);
+          final r = editor.cropRect!;
+          return 'ok croprect=${r.left.round()},${r.top.round()},'
+              '${r.width.round()}x${r.height.round()}';
+        case 'cropapply':
+          final editor = DebugHooks.editor;
+          if (editor == null) return 'no editor';
+          if (!editor.isCropping) return 'not cropping (tool crop first)';
+          final applied = await editor.applyCrop();
+          return 'ok applied=$applied '
+              'image=${editor.image.width}x${editor.image.height} '
+              'annotations=${editor.annotations.length}';
+        case 'cropcancel':
+          final editor = DebugHooks.editor;
+          if (editor == null) return 'no editor';
+          editor.cancelCrop();
+          return 'ok tool=${editor.tool.name}';
         case 'stampsource':
           // `stampsource x y`: the clone stamp source (like Alt-click), image
           // pixels. Strokes then go through `tool stamp` + `draw`.
@@ -404,6 +446,8 @@ class DebugCommandServer {
           String o(Offset p) =>
               '(${p.dx.toStringAsFixed(1)},${p.dy.toStringAsFixed(1)})';
           final lines = <String>[
+            'image=${editor.image.width}x${editor.image.height}'
+                '${editor.cropRect == null ? '' : ' crop=${editor.cropRect!.left.round()},${editor.cropRect!.top.round()},${editor.cropRect!.width.round()}x${editor.cropRect!.height.round()} cropRatio=${editor.cropRatio.token}'}',
             for (final a in editor.annotations)
               '${a.id}:${a.runtimeType} rot=${a.rotation.toStringAsFixed(3)} '
                   'bounds=${a.bounds.left.toStringAsFixed(1)},${a.bounds.top.toStringAsFixed(1)},'

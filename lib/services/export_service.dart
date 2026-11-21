@@ -28,9 +28,16 @@ class ExportService {
     final recorder = ui.PictureRecorder();
     final canvas = ui.Canvas(recorder);
     canvas.drawImage(source, ui.Offset.zero, ui.Paint());
+    // Anything past the image edge (dragged out, or left over by a crop) is
+    // not part of the picture; the editor canvas clips the same way.
+    canvas.save();
+    canvas.clipRect(
+      ui.Rect.fromLTWH(0, 0, source.width.toDouble(), source.height.toDouble()),
+    );
     for (final annotation in annotations) {
       annotation.paint(canvas, source);
     }
+    canvas.restore();
     final picture = recorder.endRecording();
     final result = await picture.toImage(source.width, source.height);
     picture.dispose();

@@ -5,8 +5,22 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme.dart';
 import '../../models/annotation.dart';
+import '../../models/crop.dart';
+import '../../models/edit_history.dart';
+import '../../services/export_service.dart';
 
-enum _DragKind { draw, move, handle, rotate }
+enum _DragKind { draw, move, handle, rotate, crop }
+
+enum _CropAction { move, resize, create }
+
+/// One history entry: everything an undo has to put back. Images are
+/// immutable `ui.Image`s, so a snapshot just keeps references.
+class EditorSnapshot {
+  const EditorSnapshot(this.annotations, this.image);
+
+  final List<Annotation> annotations;
+  final ui.Image image;
+}
 
 /// Editor state: annotations, tool, style, selection, undo/redo and zoom.
 ///
@@ -14,13 +28,15 @@ enum _DragKind { draw, move, handle, rotate }
 /// through [transformation].
 class EditorController extends ChangeNotifier {
   EditorController({
-    required this.image,
+    required ui.Image image,
     required this.pixelRatio,
     this.onOcrRegion,
     this.onToolSettingsChanged,
     ToolType? initialTool,
     AnnotationStyle? initialStyle,
-  }) : _tool = initialTool ?? ToolType.arrow,
+  }) : documentImage = image,
+       _image = image,
+       _tool = initialTool ?? ToolType.arrow,
        _style = initialStyle ?? _defaultStyle(pixelRatio),
        _rememberedStyle = initialStyle ?? _defaultStyle(pixelRatio),
        _ocrDraftStyle = AnnotationStyle(
@@ -28,7 +44,17 @@ class EditorController extends ChangeNotifier {
          strokeWidth: (2 * pixelRatio).roundToDouble(),
        );
 
-  final ui.Image image;
+  /// The image the editor was opened with. Owned by the capture flow
+  /// (`EditorDocument`), never disposed here; `EditorScreen` compares it with
+  /// the flow's document to detect a *new* document (the current [image] stops
+  /// matching after a crop).
+  final ui.Image documentImage;
+
+  /// The image being edited: [documentImage] until a crop replaces it. The
+  /// images a crop creates are owned by this controller (see [_owned]).
+  ui.Image _image;
+  ui.Image get image => _image;
+
   final double pixelRatio;
   final transformation = TransformationController();
 
@@ -70,8 +96,27 @@ class EditorController extends ChangeNotifier {
   static const maxHistory = 100;
 
   List<Annotation> _annotations = [];
-  final List<List<Annotation>> _undo = [];
-  final List<List<Annotation>> _redo = [];
+  final EditHistory<EditorSnapshot> _history = EditHistory(
+    maxEntries: maxHistory,
+  );
+
+  /// Images this controller created (crop results) and must dispose once no
+  /// history entry nor the current state refers to them. [documentImage] is
+  /// never in here.
+  final List<ui.Image> _owned = [];
+
+  // Crop tool state. `_cropRect != null` means a crop is in progress.
+  Rect? _cropRect;
+  CropRatio _cropRatio = CropRatio.free;
+  ToolType _toolBeforeCrop = ToolType.arrow;
+  _CropAction _cropAction = _CropAction.create;
+  CropHandle? _cropHandle;
+  Rect? _cropOrigin;
+  bool _applyingCrop = false;
+
+  /// Set when the image changed (crop, undo/redo of a crop): the screen
+  /// re-fits the viewport on the next layout.
+  bool fitRequested = false;
 
   ToolType _tool;
   AnnotationStyle _style;
@@ -117,8 +162,11 @@ class EditorController extends ChangeNotifier {
   Annotation? get draft => _draft;
   TextAnnotation? get editingText => _editingText;
   bool get isEditingText => _editingText != null;
-  bool get canUndo => _undo.isNotEmpty;
-  bool get canRedo => _redo.isNotEmpty;
+  bool get canUndo => _history.canUndo;
+  bool get canRedo => _history.canRedo;
+  bool get isCropping => _cropRect != null;
+  Rect? get cropRect => _cropRect;
+  CropRatio get cropRatio => _cropRatio;
   bool get hasAnnotations => _annotations.isNotEmpty;
   bool get hasStampSource => stampSource.hasSource;
   bool get spaceHeld => _spaceHeld;
@@ -156,6 +204,14 @@ class EditorController extends ChangeNotifier {
   void setTool(ToolType tool) {
     if (_tool == tool) return;
     commitTextEditing();
+    // Switching away from the crop tool cancels the crop in progress.
+    if (_tool == ToolType.crop) _clearCrop();
+    if (tool == ToolType.crop) {
+      _toolBeforeCrop = _tool;
+      _cropRect = wholeImageRect(imageSize);
+      _cropRatio = CropRatio.free;
+      hover.value = null;
+    }
     _tool = tool;
     if (tool != ToolType.select) _selectedId = null;
     notifyListeners();
@@ -202,28 +258,64 @@ class EditorController extends ChangeNotifier {
   // History
   // ---------------------------------------------------------------------------
 
-  void _pushHistory([List<Annotation>? snapshot]) {
-    _undo.add(snapshot ?? List.of(_annotations));
-    if (_undo.length > maxHistory) _undo.removeAt(0);
-    _redo.clear();
+  /// Records the state before a change: [annotations] (default: the current
+  /// ones) together with the current image.
+  void _pushHistory([List<Annotation>? annotations]) {
+    final dropped = _history.push(
+      EditorSnapshot(annotations ?? List.of(_annotations), _image),
+    );
+    if (dropped.isNotEmpty) _releaseUnreferenced();
+  }
+
+  /// Disposes the images this controller created that neither the current
+  /// state nor any history entry refers to any more (a crop that fell off the
+  /// redo stack or past [maxHistory]). Identity comparison on purpose.
+  void _releaseUnreferenced() {
+    final live = <ui.Image>[_image, for (final s in _history.entries) s.image];
+    _owned.removeWhere((image) {
+      if (live.any((other) => identical(other, image))) return false;
+      image.dispose();
+      return true;
+    });
+  }
+
+  void _restore(EditorSnapshot snapshot) {
+    final imageChanged = !identical(snapshot.image, _image);
+    _annotations = snapshot.annotations;
+    _image = snapshot.image;
+    _selectedId = null;
+    if (imageChanged) {
+      fitRequested = true;
+      stampSource.clear(); // its point was in the other image's space
+    }
   }
 
   void undo() {
     commitTextEditing();
-    if (_undo.isEmpty) return;
-    _redo.add(List.of(_annotations));
-    _annotations = _undo.removeLast();
-    _selectedId = null;
+    _clearCropForHistory();
+    final snapshot = _history.undo(
+      EditorSnapshot(List.of(_annotations), _image),
+    );
+    if (snapshot == null) return;
+    _restore(snapshot);
     notifyListeners();
   }
 
   void redo() {
     commitTextEditing();
-    if (_redo.isEmpty) return;
-    _undo.add(List.of(_annotations));
-    _annotations = _redo.removeLast();
-    _selectedId = null;
+    _clearCropForHistory();
+    final snapshot = _history.redo(
+      EditorSnapshot(List.of(_annotations), _image),
+    );
+    if (snapshot == null) return;
+    _restore(snapshot);
     notifyListeners();
+  }
+
+  /// A crop in progress is abandoned (back to the previous tool) before an
+  /// undo/redo/clear touches the document it was drawn on.
+  void _clearCropForHistory() {
+    if (_cropRect != null) cancelCrop();
   }
 
   void deleteSelected() {
@@ -237,6 +329,7 @@ class EditorController extends ChangeNotifier {
 
   void clearAll() {
     commitTextEditing();
+    _clearCropForHistory();
     if (_annotations.isEmpty) return;
     _pushHistory();
     _annotations = [];
@@ -260,10 +353,12 @@ class EditorController extends ChangeNotifier {
   /// [alt] is Alt (Option on macOS) held at the click: with the stamp tool it
   /// sets the source instead of painting.
   void pointerDown(Offset p, {bool alt = false}) {
-    if (panEnabled) return;
+    if (panEnabled || _applyingCrop) return;
     switch (_tool) {
       case ToolType.hand:
         return;
+      case ToolType.crop:
+        _cropPointerDown(p);
       case ToolType.select:
         _selectAt(p);
       case ToolType.text:
@@ -398,6 +493,8 @@ class EditorController extends ChangeNotifier {
   void pointerMove(Offset p, {bool shift = false}) {
     if (_drag == null || _dragStart == null) return;
     switch (_drag!) {
+      case _DragKind.crop:
+        _cropPointerMove(p, shift);
       case _DragKind.draw:
         final draft = _draft;
         if (draft is ShapeAnnotation) {
@@ -458,6 +555,8 @@ class EditorController extends ChangeNotifier {
   void pointerUp(Offset p) {
     if (_drag == null) return;
     switch (_drag!) {
+      case _DragKind.crop:
+        _cropPointerUp(p);
       case _DragKind.draw:
         var draft = _draft;
         _draft = null;
@@ -533,6 +632,155 @@ class EditorController extends ChangeNotifier {
   bool isOverAnnotation(Offset p) {
     final tolerance = _tolerance();
     return _annotations.any((a) => a.hitTest(p, tolerance));
+  }
+
+  // ---------------------------------------------------------------------------
+  // Crop
+  // ---------------------------------------------------------------------------
+
+  /// Rect of the crop in progress with a ratio lock: the preset's ratio, or —
+  /// with Shift held and no preset — the ratio the rect had when the drag
+  /// began.
+  double? _cropLockRatio(Rect origin, bool shift) {
+    final preset = _cropRatio.value(imageSize);
+    if (preset != null) return preset;
+    if (shift && origin.height > 0) return origin.width / origin.height;
+    return null;
+  }
+
+  void _cropPointerDown(Offset p) {
+    final rect = _cropRect;
+    if (rect == null) return;
+    _drag = _DragKind.crop;
+    _dragStart = p;
+    _cropOrigin = rect;
+    // Handles first (8 on-screen px around each), then the inside (move);
+    // anywhere else starts a new rectangle.
+    final handle = hitCropHandle(rect, p, 10 / math.max(zoom, 0.01));
+    if (handle != null) {
+      _cropAction = _CropAction.resize;
+      _cropHandle = handle;
+    } else if (rect.contains(p)) {
+      _cropAction = _CropAction.move;
+    } else {
+      _cropAction = _CropAction.create;
+    }
+  }
+
+  void _cropPointerMove(Offset p, bool shift) {
+    final origin = _cropOrigin;
+    final start = _dragStart;
+    if (origin == null || start == null) return;
+    switch (_cropAction) {
+      case _CropAction.move:
+        _cropRect = moveCropRect(origin, p - start, imageSize);
+      case _CropAction.resize:
+        _cropRect = resizeCropRect(
+          rect: origin,
+          handle: _cropHandle!,
+          pointer: p,
+          bounds: imageSize,
+          ratio: _cropLockRatio(origin, shift),
+        );
+      case _CropAction.create:
+        _cropRect = cropRectFromDrag(
+          start,
+          p,
+          imageSize,
+          ratio: _cropLockRatio(origin, shift),
+        );
+    }
+  }
+
+  void _cropPointerUp(Offset p) {
+    final origin = _cropOrigin;
+    final rect = _cropRect;
+    // A click or a sliver of a drag is not a new rectangle: keep the old one.
+    if (_cropAction == _CropAction.create &&
+        origin != null &&
+        rect != null &&
+        (rect.width < minCropSize || rect.height < minCropSize)) {
+      _cropRect = origin;
+    }
+    _cropOrigin = null;
+    _cropHandle = null;
+  }
+
+  /// Picks an aspect preset and re-fits the current rect to it (largest rect
+  /// of that ratio inside it, around its center).
+  void setCropRatio(CropRatio ratio) {
+    _cropRatio = ratio;
+    final rect = _cropRect;
+    final value = ratio.value(imageSize);
+    if (rect != null && value != null) {
+      _cropRect = fitRectToRatio(rect, value, imageSize);
+    }
+    notifyListeners();
+  }
+
+  /// Sets the crop rect directly (debug server); clamped to the image.
+  void setCropRect(Rect rect) {
+    if (_cropRect == null) return;
+    _cropRect = clampCropRect(rect, imageSize);
+    notifyListeners();
+  }
+
+  void _clearCrop() {
+    _cropRect = null;
+    _cropOrigin = null;
+    _cropHandle = null;
+    // A crop cancelled mid-drag (undo/redo shortcut) must not let the next
+    // pointerMove resurrect the rect.
+    _drag = null;
+  }
+
+  /// Leaves the crop tool without changing the image; back to the previous
+  /// tool.
+  void cancelCrop() {
+    if (_cropRect == null) return;
+    _clearCrop();
+    _tool = _toolBeforeCrop;
+    if (_tool != ToolType.select) _selectedId = null;
+    notifyListeners();
+    onToolSettingsChanged?.call();
+  }
+
+  /// Cuts the image to the crop rect. Annotations move with the image
+  /// ([annotationsAfterCrop]); undo brings back both. The tool returns to the
+  /// previous one. A rect covering the whole image just cancels.
+  Future<bool> applyCrop() async {
+    final rect = _cropRect;
+    if (rect == null || _applyingCrop) return false;
+    commitTextEditing();
+    if (rect == wholeImageRect(imageSize)) {
+      cancelCrop();
+      return false;
+    }
+    _applyingCrop = true;
+    try {
+      final cropped = await ExportService.crop(_image, rect);
+      // The editor may have been torn down, or the crop abandoned, while the
+      // raster thread worked.
+      if (_disposed || _cropRect == null) {
+        cropped.dispose();
+        return false;
+      }
+      _pushHistory();
+      _owned.add(cropped);
+      _image = cropped;
+      _annotations = annotationsAfterCrop(_annotations, rect);
+      _selectedId = null;
+      _draft = null;
+      stampSource.clear();
+      _clearCrop();
+      _tool = _toolBeforeCrop;
+      fitRequested = true;
+      notifyListeners();
+      onToolSettingsChanged?.call();
+      return true;
+    } finally {
+      _applyingCrop = false;
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -622,6 +870,7 @@ class EditorController extends ChangeNotifier {
         .clamp(0.02, 1.0);
     _setZoom(scale, viewport);
     _fitScale = zoom;
+    fitRequested = false;
   }
 
   void actualSize(Size viewport) => _setZoom(1.0, viewport);
@@ -654,6 +903,11 @@ class EditorController extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    // The images created by crops; the document image is not ours.
+    for (final image in _owned) {
+      image.dispose();
+    }
+    _owned.clear();
     transformation.dispose();
     hover.dispose();
     super.dispose();

@@ -89,6 +89,11 @@ abstract class Strings {
   String get toolNumber;
   String get toolBlur;
   String get toolStamp;
+  String get toolCrop;
+  String get cropFree;
+  String get cropOriginal;
+  String get cropApply;
+  String get cropCancel;
   String get brushSize;
   String get hardness;
   String get stampNoSourceHint;
@@ -332,6 +337,16 @@ class _Pt extends Strings {
   String get toolBlur => 'Desfoque';
   @override
   String get toolStamp => 'Carimbo';
+  @override
+  String get toolCrop => 'Recortar';
+  @override
+  String get cropFree => 'Livre';
+  @override
+  String get cropOriginal => 'Original';
+  @override
+  String get cropApply => 'Aplicar recorte';
+  @override
+  String get cropCancel => 'Cancelar';
   @override
   String get brushSize => 'Tamanho do pincel';
   @override
@@ -704,6 +719,16 @@ class _En extends Strings {
   String get toolBlur => 'Blur';
   @override
   String get toolStamp => 'Clone stamp';
+  @override
+  String get toolCrop => 'Crop';
+  @override
+  String get cropFree => 'Free';
+  @override
+  String get cropOriginal => 'Original';
+  @override
+  String get cropApply => 'Apply crop';
+  @override
+  String get cropCancel => 'Cancel';
   @override
   String get brushSize => 'Brush size';
   @override

@@ -21,7 +21,8 @@ Registro combinado com o Rafael em 2026-11-20. Status: `[ ]` pendente, `[~]` em 
 
 ## Melhorias
 
-- [ ] **M1 — Editor: ferramenta Crop.** Corte seletivo pelo usuário; proporções fixas (1:1, 3:4, 4:3, 16:9 …) e Custom (livre).
+- [~] **M1 — Editor: ferramenta Crop.** Corte seletivo pelo usuário; proporções fixas (1:1, 3:4, 4:3, 16:9 …) e Custom (livre).
+  - Implementado em 2026-11-21, falta compilar e testar manualmente: `ToolType.crop` (tecla `C`, transitória), `lib/models/crop.dart` (lógica pura), histórico com imagem (`UndoHistory` + `EditorSnapshot`), recorte de anotações que cruzam a borda (clip no canvas e no `ExportService.render`), debug `croprect`/`cropratio`/`cropapply`/`cropcancel`, testes em `test/crop_test.dart`.
 - [x] **M2 — Configurações/Editor: lembrar ajustes das ferramentas.** Opção liga/desliga para guardar cor, espessura (e demais estilos) e **última ferramenta usada**.
   - ✅ 2026-11-20 testado no Windows arm64 (MSIX 1.2.0.2/1.2.0.3).
   - Implementado (2026-11-20), falta teste manual: `AppSettings.rememberTools` + `ToolMemory` (tamanhos em unidades lógicas), debounce 300 ms, OCR não é lembrado.
@@ -34,7 +35,7 @@ Registro combinado com o Rafael em 2026-11-20. Status: `[ ]` pendente, `[~]` em 
 - [~] **M5 — Configurações: "Salvar todas as telas" (nova opção).** Captura/salva todos os monitores.
   - ✅ 2026-11-20 testado no Windows arm64 com 1 monitor. **Falta testar com vários monitores** (um arquivo por tela e imagem combinada).
   - Implementado em 2026-11-20 (`CaptureMode.allScreens` + atalho Ctrl+Shift+5 + item do tray/card da Home, `AppSettings.allScreensMode` perScreen|combined, `ScreenLayout` em `lib/services/screen_layout.dart`, `FileNamer.nextBatch`, `ExportService.compose/saveBatch`; testes em `test/screen_layout_test.dart` e `test/file_namer_test.dart`); falta validar manualmente (1 e 2+ monitores, mixed-DPI, Wayland).
-- [~] **M3/M5 — Correções (2026-11-21), falta compilar e testar no macOS.** (a) Ações sem janela (todas as telas, salvar direto/copiar/extrair texto da overlay): se a notificação do SO não foi entregue, a Home é aberta para mostrar o toast (`_reportHeadless`). (b) macOS sandbox: "última pasta usada" sobrevive ao relançamento (`lastSaveDirectoryBookmark`, `requestFolderAccess` nativo com painel "Permitir" após Salvar Como, vários escopos ativos; testes em `test/save_directory_test.dart`).
+- [x] **M3/M5 — Correções (2026-11-21)** ✅ testadas no macOS pelo Rafael. (a) Ações sem janela (todas as telas, salvar direto/copiar/extrair texto da overlay): se a notificação do SO não foi entregue, a Home é aberta para mostrar o toast (`_reportHeadless`). (b) macOS sandbox: "última pasta usada" sobrevive ao relançamento (`lastSaveDirectoryBookmark`, `requestFolderAccess` nativo com painel "Permitir" após Salvar Como, vários escopos ativos; testes em `test/save_directory_test.dart`).
 
 - [~] **M6 — Editor: ferramenta Carimbo (clone stamp, estilo Photoshop).** Alt/Option+clique define a origem; ao pintar, copia da origem mantendo o deslocamento (modo alinhado). Tamanho do pincel e dureza (borda suave). Não destrutivo, com undo, editável/selecionável como as demais anotações.
   - Implementado em 2026-11-21, falta compilar e testar manualmente: `ToolType.stamp` (tecla `S`), `StampAnnotation` + `StampSourceState` (`annotation.dart`), `AnnotationStyle.brushSize/hardness` (+ `ToolMemory`), debug `stampsource`/`stampstyle`, testes em `test/stamp_test.dart`.
@@ -71,6 +72,8 @@ M8 vem antes de M6/M1 para que as ferramentas novas já nasçam com os ícones n
 - Listagem no Winget: a fonte `msstore` mostra o ID da Store (`9NX0J9N066SM`) e versão "Unknown". Isso é o normal dessa fonte, não um erro de configuração da loja. Para aparecer como `RafaelWMS.ShowShot` com versão, é preciso publicar um manifesto no repositório comunitário `microsoft/winget-pkgs` (o `wingetcreate` ajuda). Isso exige um instalador baixável por URL pública (MSIX assinado ou exe).
 
 ## Fechamento da release
+
+> Regra combinada (2026-11-21): o merge no `main` só acontece depois de validar **todas** as plataformas e arquiteturas: macOS arm64, Windows x64, Windows arm64, Linux x64 e Linux arm64.
 
 - [ ] Subir versão: `pubspec.yaml` (1.3.0+N), `msix_version: 1.3.0.0`, packaging Linux/macOS/README/CLAUDE.md
 - [ ] `flutter analyze` limpo, `dart format`, `flutter test`

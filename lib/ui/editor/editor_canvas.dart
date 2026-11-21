@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme.dart';
 import '../../models/annotation.dart';
+import '../../models/crop.dart';
 import 'editor_controller.dart';
 
 /// Paints the screenshot, the annotations and the selection chrome.
@@ -30,9 +31,17 @@ class EditorCanvasPainter extends CustomPainter {
       Offset.zero,
       Paint()..filterQuality = FilterQuality.medium,
     );
+    // Annotations are clipped by the image: what lies past its edge (dragged
+    // out, or left over by a crop) is not part of the picture, and Copy/Save
+    // (ExportService.render) clip the same way.
+    canvas.save();
+    canvas.clipRect(
+      Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble()),
+    );
     for (final annotation in annotations) {
       annotation.paint(canvas, image);
     }
+    canvas.restore();
     final current = selected;
     if (current != null) _paintSelection(canvas, current);
   }
@@ -214,4 +223,64 @@ class StampOverlayPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(StampOverlayPainter old) => old.controller != controller;
+}
+
+/// Crop tool chrome, painted above the annotations: the image dimmed outside
+/// the crop rectangle, a thin border, rule-of-thirds guides and the eight
+/// handles (same look as the capture overlay). Listens to the controller (the
+/// rect changes through it) and the zoom, so handles keep their screen size.
+class CropOverlayPainter extends CustomPainter {
+  CropOverlayPainter({required this.controller})
+    : super(repaint: Listenable.merge([controller, controller.transformation]));
+
+  final EditorController controller;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = controller.cropRect;
+    if (controller.tool != ToolType.crop || rect == null) return;
+    final inv = 1 / math.max(controller.zoom, 0.01);
+    final full = Offset.zero & size;
+
+    // Dim everything outside the crop rectangle.
+    canvas.drawPath(
+      Path()
+        ..addRect(full)
+        ..addRect(rect)
+        ..fillType = PathFillType.evenOdd,
+      Paint()..color = const Color(0x99000000),
+    );
+
+    canvas.drawRect(
+      rect,
+      Paint()
+        ..color = Colors.white
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1 * inv,
+    );
+
+    // Rule-of-thirds guides.
+    final guide = Paint()
+      ..color = Colors.white.withValues(alpha: 0.3)
+      ..strokeWidth = 1 * inv;
+    for (var i = 1; i < 3; i++) {
+      final x = rect.left + rect.width * i / 3;
+      final y = rect.top + rect.height * i / 3;
+      canvas.drawLine(Offset(x, rect.top), Offset(x, rect.bottom), guide);
+      canvas.drawLine(Offset(rect.left, y), Offset(rect.right, y), guide);
+    }
+
+    final fill = Paint()..color = Colors.white;
+    final stroke = Paint()
+      ..color = AppColors.violet
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5 * inv;
+    for (final handle in cropHandlePoints(rect)) {
+      canvas.drawCircle(handle, 5.5 * inv, fill);
+      canvas.drawCircle(handle, 5.5 * inv, stroke);
+    }
+  }
+
+  @override
+  bool shouldRepaint(CropOverlayPainter old) => old.controller != controller;
 }

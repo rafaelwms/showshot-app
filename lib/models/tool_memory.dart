@@ -26,9 +26,10 @@ class ToolMemory {
     this.hardness = 0.5,
   });
 
-  /// Tools never restored as the starting tool: the OCR region tool is a
-  /// one-shot action, not something to annotate with.
-  static const transientTools = {ToolType.ocr};
+  /// Tools never restored as the starting tool: the OCR region tool and the
+  /// crop tool are one-shot actions, not something to annotate with (after
+  /// applying/cancelling a crop the editor returns to the previous tool).
+  static const transientTools = {ToolType.ocr, ToolType.crop};
 
   /// [ToolType.name] of the last non-transient tool; null = editor default.
   final String? tool;

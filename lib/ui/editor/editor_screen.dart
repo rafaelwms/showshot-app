@@ -91,7 +91,7 @@ class _EditorScreenState extends State<EditorScreen> {
     _settingsService = services.settings;
     final document = services.flow.document;
     if (document != null &&
-        (_controller == null || _controller!.image != document.image)) {
+        (_controller == null || _controller!.documentImage != document.image)) {
       final memory = _flushToolMemory();
       _controller?.dispose();
       _controller = EditorController(
@@ -346,6 +346,19 @@ class _EditorScreenState extends State<EditorScreen> {
       return KeyEventResult.handled;
     }
 
+    // Crop in progress: Enter applies, Esc cancels.
+    if (controller.isCropping) {
+      if (key == LogicalKeyboardKey.enter ||
+          key == LogicalKeyboardKey.numpadEnter) {
+        controller.applyCrop();
+        return KeyEventResult.handled;
+      }
+      if (key == LogicalKeyboardKey.escape) {
+        controller.cancelCrop();
+        return KeyEventResult.handled;
+      }
+    }
+
     if (key == LogicalKeyboardKey.escape) {
       if (controller.selectedId != null) {
         controller.selectAnnotation(null);
@@ -363,6 +376,7 @@ class _EditorScreenState extends State<EditorScreen> {
     final tool = switch (key) {
       LogicalKeyboardKey.keyV => ToolType.select,
       LogicalKeyboardKey.keyH => ToolType.hand,
+      LogicalKeyboardKey.keyC => ToolType.crop,
       LogicalKeyboardKey.keyA => ToolType.arrow,
       LogicalKeyboardKey.keyL => ToolType.line,
       LogicalKeyboardKey.keyR => ToolType.rect,
@@ -566,7 +580,16 @@ class _EditorScreenState extends State<EditorScreen> {
         // Fit on first layout, and again whenever the window is resized
         // (e.g. it was maximized after opening) as long as the user hasn't
         // zoomed away from the fitted view.
-        if (constraints.biggest.width > 0 &&
+        // A crop (or undoing/redoing one) changes the image size: re-fit.
+        if (constraints.biggest.width > 0 && controller.fitRequested) {
+          controller.fitRequested = false;
+          _fitted = true;
+          _lastViewport = constraints.biggest;
+          final viewport = constraints.biggest;
+          WidgetsBinding.instance.addPostFrameCallback(
+            (_) => controller.fitTo(viewport),
+          );
+        } else if (constraints.biggest.width > 0 &&
             constraints.biggest != _lastViewport) {
           final refit = !_fitted || controller.isFitted;
           _fitted = true;
@@ -711,6 +734,16 @@ class _EditorCanvasState extends State<_EditorCanvas> {
                     child: RepaintBoundary(
                       child: CustomPaint(
                         painter: StampOverlayPainter(controller: controller),
+                      ),
+                    ),
+                  ),
+                ),
+              if (controller.tool == ToolType.crop && controller.isCropping)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: RepaintBoundary(
+                      child: CustomPaint(
+                        painter: CropOverlayPainter(controller: controller),
                       ),
                     ),
                   ),

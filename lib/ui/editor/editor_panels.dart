@@ -4,6 +4,7 @@ import '../../core/app_icons.dart';
 import '../../core/strings.dart';
 import '../../core/theme.dart';
 import '../../models/annotation.dart';
+import '../../models/crop.dart';
 import '../widgets/common.dart';
 import 'editor_controller.dart';
 
@@ -18,6 +19,9 @@ class _ToolSpec {
 List<_ToolSpec> _toolSpecs(AppIcons i) => [
   _ToolSpec(ToolType.select, i.select, 'V'),
   _ToolSpec(ToolType.hand, i.hand, 'H'),
+  // Crop edits the image itself rather than annotating it, so it sits with
+  // select/hand in the top group.
+  _ToolSpec(ToolType.crop, i.crop, 'C'),
   _ToolSpec(ToolType.arrow, i.arrow, 'A'),
   // lineSegment is already drawn on the diagonal: no extra rotation.
   _ToolSpec(ToolType.line, i.line, 'L'),
@@ -46,6 +50,7 @@ String toolName(Strings strings, ToolType tool) => switch (tool) {
   ToolType.blur => strings.toolBlur,
   ToolType.stamp => strings.toolStamp,
   ToolType.ocr => strings.extractText,
+  ToolType.crop => strings.toolCrop,
 };
 
 /// Vertical floating tool palette.
@@ -71,7 +76,7 @@ class ToolRail extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             for (var i = 0; i < tools.length; i++) ...[
-              if (i == 2 || i == 8) const _RailDivider(),
+              if (i == 3 || i == 9) const _RailDivider(),
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 1),
                 child: _RailButton(
@@ -157,6 +162,9 @@ class PropertiesBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final strings = Strings.of(context);
     final icons = AppIcons.of(context);
+    if (controller.tool == ToolType.crop && controller.isCropping) {
+      return _CropBar(controller: controller);
+    }
     final style = controller.style;
     final tool = controller.tool;
     final selected = controller.selected;
@@ -329,6 +337,121 @@ class PropertiesBar extends StatelessWidget {
             ),
           ],
         ],
+      ),
+    );
+  }
+}
+
+/// Properties bar while the crop tool is active: aspect presets, the live
+/// size of the crop rectangle, and apply / cancel.
+class _CropBar extends StatelessWidget {
+  const _CropBar({required this.controller});
+
+  final EditorController controller;
+
+  static String _label(Strings strings, CropRatio ratio) => switch (ratio) {
+    CropRatio.free => strings.cropFree,
+    CropRatio.original => strings.cropOriginal,
+    _ => ratio.token,
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = Strings.of(context);
+    final icons = AppIcons.of(context);
+    final rect = controller.cropRect!;
+    return GlassPanel(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      radius: 16,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final ratio in CropRatio.values)
+            _RatioChip(
+              label: _label(strings, ratio),
+              active: controller.cropRatio == ratio,
+              onPressed: () => controller.setCropRatio(ratio),
+            ),
+          const _BarDivider(),
+          SizedBox(
+            width: 92,
+            child: Text(
+              '${rect.width.round()} × ${rect.height.round()}',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: context.palette.text,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+          ),
+          const _BarDivider(),
+          ToolButton(
+            icon: icons.close,
+            iconSize: AppIcons.buttonSize,
+            tooltip: strings.cropCancel,
+            shortcut: 'Esc',
+            size: 32,
+            danger: true,
+            onPressed: controller.cancelCrop,
+          ),
+          const SizedBox(width: 4),
+          ToolButton(
+            icon: icons.confirm,
+            iconSize: AppIcons.buttonSize,
+            tooltip: strings.cropApply,
+            shortcut: 'Enter',
+            size: 32,
+            active: true,
+            onPressed: controller.applyCrop,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RatioChip extends StatelessWidget {
+  const _RatioChip({
+    required this.label,
+    required this.active,
+    required this.onPressed,
+  });
+
+  final String label;
+  final bool active;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 2),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(8),
+          hoverColor: Colors.white.withValues(alpha: 0.06),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 160),
+            height: 30,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              gradient: active ? context.palette.accentGradient : null,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: active ? Colors.white : context.palette.textMuted,
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

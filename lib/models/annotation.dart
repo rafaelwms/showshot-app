@@ -6,7 +6,8 @@ import 'package:flutter/painting.dart';
 /// Editor tools. Everything except [select], [hand] and [ocr] creates
 /// annotations — [ocr] draws a selection rectangle like [rect], but on
 /// release it recognizes text in that region instead of leaving a shape
-/// behind. [stamp] is the clone stamp (see [StampAnnotation]).
+/// behind. [stamp] is the clone stamp (see [StampAnnotation]). [crop] edits
+/// the image itself (a crop rectangle, applied or cancelled) and is transient.
 enum ToolType {
   select,
   hand,
@@ -21,6 +22,7 @@ enum ToolType {
   blur,
   stamp,
   ocr,
+  crop,
 }
 
 /// Visual properties shared by all annotations.
@@ -256,6 +258,12 @@ abstract class Annotation {
   bool hitTestLocal(Offset point, double tolerance);
 
   Annotation translated(Offset delta);
+
+  /// Moves the annotation by [delta] because the *image* underneath moved
+  /// (the crop tool shifts the whole picture), as opposed to the user dragging
+  /// the annotation over a fixed picture ([translated]). Identical for
+  /// everything except annotations that sample the picture.
+  Annotation shiftedWithImage(Offset delta) => translated(delta);
 
   Annotation withStyle(AnnotationStyle style);
 
@@ -1038,6 +1046,12 @@ class StampSourceState {
     _offset = null;
   }
 
+  /// Forgets the source (e.g. the image was cropped: the point is stale).
+  void clear() {
+    _source = null;
+    _offset = null;
+  }
+
   /// The offset for a stroke starting at [first]. Fixed by the first stroke
   /// after [setSource] (rounded to whole pixels so the copy is pixel exact)
   /// and returned unchanged for later ones. Requires [hasSource].
@@ -1135,6 +1149,16 @@ class StampAnnotation extends Annotation {
     style: style,
     points: [for (final p in points) p + delta],
     offset: offset - delta,
+  );
+
+  /// The image moved by [delta] too, so source and destination shift
+  /// together and the sampling [offset] stays as it is (unlike [translated]).
+  @override
+  Annotation shiftedWithImage(Offset delta) => StampAnnotation(
+    id: id,
+    style: style,
+    points: [for (final p in points) p + delta],
+    offset: offset,
   );
 
   @override
