@@ -630,7 +630,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                               ),
                                             ),
                                             Text(
-                                              '${strings.version} 1.2.0 · ${strings.madeBy}',
+                                              '${strings.version} 1.3.0 · ${strings.madeBy}',
                                               style: TextStyle(
                                                 color:
                                                     context.palette.textMuted,

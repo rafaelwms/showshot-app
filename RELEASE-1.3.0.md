@@ -77,9 +77,11 @@ M8 vem antes de M6/M1 para que as ferramentas novas já nasçam com os ícones n
 
 ## Fechamento da release
 
+> Ordem de validação (2026-11-21), tudo nativo e uma de cada vez: 1. Mac DMG · 2. Mac App Store · 3. Windows arm64 (Radxa) · 4. Linux arm64 (Radxa) · 5. Linux x64 (Desktop) · 6. Windows x64 (Desktop).
+>
 > Regra combinada (2026-11-21): o merge no `main` só acontece depois de validar **todas** as plataformas e arquiteturas: macOS arm64, Windows x64, Windows arm64, Linux x64 e Linux arm64.
 
-- [ ] Subir versão: `pubspec.yaml` (1.3.0+N), `msix_version: 1.3.0.0`, packaging Linux/macOS/README/CLAUDE.md
+- [x] Subir versão: 1.3.0+3 (`pubspec.yaml`, `msix_version` 1.3.0.0, Xcode MARKETING/CURRENT_PROJECT_VERSION, Runner.rc, metainfo do Linux, tela Sobre, `make_dmg.sh`)
 - [ ] `flutter analyze` limpo, `dart format`, `flutter test`
 - [ ] Builds: macOS arm64 (Mac), Windows x64 (Desktop), Windows arm64 (Radxa), Linux x64 (Desktop), Linux arm64 (Radxa)
 - [ ] Testes por plataforma via debug server; correção C1 validada via Winget
