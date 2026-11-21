@@ -9,6 +9,7 @@ import 'package:image/image.dart' as img;
 import '../models/annotation.dart';
 import '../models/app_settings.dart';
 import 'file_namer.dart';
+import 'folder_access.dart';
 import 'native_bridge.dart';
 import 'screen_layout.dart';
 
@@ -228,13 +229,33 @@ class ExportService {
     return fallback;
   }
 
-  /// Called with a fresh base64 bookmark when macOS reports the stored one as
-  /// stale (folder moved/renamed), so the caller can persist it.
+  /// Called with a fresh base64 bookmark when macOS reports the stored
+  /// configured-folder bookmark as stale (folder moved/renamed), so the caller
+  /// can persist it.
   void Function(String bookmark)? onBookmarkRefreshed;
 
-  /// The bookmark already resolved (and being accessed) in this launch.
-  String? _resolvedBookmark;
-  String? _resolvedPath;
+  /// Same as [onBookmarkRefreshed], for `lastSaveDirectoryBookmark`.
+  void Function(String bookmark)? onLastBookmarkRefreshed;
+
+  /// macOS: called after the user granted access to a folder through
+  /// [NativeBridge.requestFolderAccess] with the folder actually chosen and
+  /// its base64 bookmark, so the caller can persist both as
+  /// `lastSaveDirectory(+Bookmark)`.
+  void Function(String directory, String bookmark)? onLastFolderAccess;
+
+  /// Texts of the macOS "allow this folder" panel, in the current language.
+  ({String message, String prompt}) Function()? folderAccessTexts;
+
+  /// Bookmarks already resolved (and being accessed) in this launch -> path.
+  final Map<String, String> _resolvedBookmarks = {};
+
+  /// Normalized folders this launch can write to thanks to a bookmark or a
+  /// granted [NativeBridge.requestFolderAccess].
+  final Set<String> _accessibleFolders = {};
+
+  /// Folders whose permission panel the user cancelled this launch (in
+  /// memory only: asked again after a relaunch).
+  final Set<String> _declinedFolders = {};
 
   /// Called with the directory of every successful save, so the caller can
   /// persist it as `lastSaveDirectory`.
@@ -252,9 +273,16 @@ class ExportService {
       // Also re-activates the sandbox bookmark for this launch.
       configured = await _sandboxAccessiblePath(settings) ?? custom;
     }
+    final useLast = settings.saveToLastFolder && !ignoreLast;
+    var last = settings.lastSaveDirectory;
+    if (useLast) {
+      // Re-activates the bookmark of the last folder (macOS sandbox) before
+      // we check that it exists; also follows a moved/renamed folder.
+      last = await _sandboxLastPath(settings) ?? last;
+    }
     final path = await resolveSaveDirectoryPath(
-      useLastFolder: settings.saveToLastFolder && !ignoreLast,
-      lastDirectory: settings.lastSaveDirectory,
+      useLastFolder: useLast,
+      lastDirectory: last,
       configuredDirectory: configured,
       builtInDefault: defaultDirectoryPath,
       exists: (p) => Directory(p).exists(),
@@ -268,23 +296,72 @@ class ExportService {
   /// macOS/App Sandbox: re-opens access to the custom folder through its
   /// security-scoped bookmark, once per launch. Null when there's no bookmark
   /// (other platforms, or a folder picked before bookmarks existed).
-  Future<String?> _sandboxAccessiblePath(AppSettings settings) async {
-    final bookmark = settings.saveDirectoryBookmark;
+  Future<String?> _sandboxAccessiblePath(AppSettings settings) {
+    return _resolveBookmark(
+      settings.saveDirectoryBookmark,
+      onBookmarkRefreshed,
+    );
+  }
+
+  /// Same for the last used folder's bookmark (`lastSaveDirectoryBookmark`).
+  Future<String?> _sandboxLastPath(AppSettings settings) {
+    if (settings.lastSaveDirectory.isEmpty) return Future.value(null);
+    return _resolveBookmark(
+      settings.lastSaveDirectoryBookmark,
+      onLastBookmarkRefreshed,
+    );
+  }
+
+  Future<String?> _resolveBookmark(
+    String? bookmark,
+    void Function(String bookmark)? onRefreshed,
+  ) async {
     if (!Platform.isMacOS || bookmark == null || bookmark.isEmpty) return null;
-    if (bookmark == _resolvedBookmark) return _resolvedPath;
+    final cached = _resolvedBookmarks[bookmark];
+    if (cached != null) return cached;
     final resolved = await _native.resolveDirectoryBookmark(
       base64Decode(bookmark),
     );
     if (resolved == null) return null;
-    _resolvedBookmark = bookmark;
-    _resolvedPath = resolved.path;
+    _resolvedBookmarks[bookmark] = resolved.path;
+    _accessibleFolders.add(FolderAccess.normalize(resolved.path));
     final refreshed = resolved.refreshed;
     if (refreshed != null) {
       final encoded = base64Encode(refreshed);
-      _resolvedBookmark = encoded;
-      onBookmarkRefreshed?.call(encoded);
+      _resolvedBookmarks[encoded] = resolved.path;
+      onRefreshed?.call(encoded);
     }
     return resolved.path;
+  }
+
+  /// macOS + "save to the last folder": a folder reached only through the
+  /// Save As panel is writable for this launch only. After the save (the file
+  /// is already written), asks once per folder for a persistent permission so
+  /// the next launch's quick saves can really go there.
+  Future<void> _offerFolderAccess(AppSettings settings, String folder) async {
+    if (!Platform.isMacOS || !settings.saveToLastFolder) return;
+    final texts = folderAccessTexts?.call();
+    if (texts == null) return;
+    final defaultDir = await defaultDirectoryPath();
+    final needs = FolderAccess.needsPrompt(
+      folder: folder,
+      accessible: _accessibleFolders,
+      declined: _declinedFolders,
+      freeRoots: [File(defaultDir).parent.path],
+    );
+    if (!needs) return;
+    // Marked first: a cancel (or any failure) must not nag again this launch.
+    _declinedFolders.add(FolderAccess.normalize(folder));
+    final granted = await _native.requestFolderAccess(
+      path: folder,
+      message: texts.message,
+      prompt: texts.prompt,
+    );
+    if (granted == null) return;
+    final encoded = base64Encode(granted.bookmark);
+    _resolvedBookmarks[encoded] = granted.path;
+    _accessibleFolders.add(FolderAccess.normalize(granted.path));
+    onLastFolderAccess?.call(granted.path, encoded);
   }
 
   /// Saves [image] according to [settings]. Returns the written path, or null
@@ -360,7 +437,9 @@ class ExportService {
       await File(path).writeAsBytes(bytes, flush: true);
     }
     if (consumed != null) onSequenceAdvanced?.call(consumed + 1);
-    onSaved?.call(File(path).parent.path);
+    final savedDir = File(path).parent.path;
+    onSaved?.call(savedDir);
+    if (dialogUsed) await _offerFolderAccess(settings, savedDir);
     return path;
   }
 

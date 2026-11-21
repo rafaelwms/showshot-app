@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shoshot/models/app_settings.dart';
 import 'package:shoshot/services/export_service.dart';
+import 'package:shoshot/services/folder_access.dart';
 
 /// Resolves with a fake file system: [existing] holds the folders that exist.
 Future<String> resolve({
@@ -107,5 +108,75 @@ void main() {
       expect(back.saveToLastFolder, isTrue);
       expect(back.lastSaveDirectory, '/x/y');
     });
+  });
+
+  group('FolderAccess.needsPrompt', () {
+    bool needs(
+      String folder, {
+      Set<String> accessible = const {},
+      Set<String> declined = const {},
+      List<String> free = const ['/Users/me/Pictures'],
+    }) => FolderAccess.needsPrompt(
+      folder: folder,
+      accessible: accessible,
+      declined: declined,
+      freeRoots: free,
+    );
+
+    test('unknown folder outside Pictures -> prompt', () {
+      expect(needs('/Users/me/Documents/Shots'), isTrue);
+    });
+
+    test('folder already accessible (bookmark / earlier grant) -> no', () {
+      expect(
+        needs(
+          '/Users/me/Documents/Shots',
+          accessible: {'/Users/me/Documents/Shots'},
+        ),
+        isFalse,
+      );
+    });
+
+    test('declined this launch -> no', () {
+      expect(
+        needs(
+          '/Users/me/Documents/Shots',
+          declined: {'/Users/me/Documents/Shots'},
+        ),
+        isFalse,
+      );
+    });
+
+    test('inside Pictures (covered by entitlement) -> no', () {
+      expect(needs('/Users/me/Pictures/ShowShot'), isFalse);
+      expect(needs('/Users/me/Pictures'), isFalse);
+      expect(needs('/Users/me/PicturesOther'), isTrue);
+    });
+
+    test('trailing separator is ignored', () {
+      expect(needs('/a/b/', accessible: {'/a/b'}), isFalse);
+      expect(FolderAccess.normalize('/a/b//'), '/a/b');
+      expect(FolderAccess.normalize('/'), '/');
+    });
+
+    test('empty folder -> no', () {
+      expect(needs(''), isFalse);
+    });
+  });
+
+  test('lastSaveDirectoryBookmark: default, round-trip, copyWith', () {
+    expect(AppSettings.fromJson(const {}).lastSaveDirectoryBookmark, '');
+    final s = AppSettings.defaults().copyWith(
+      lastSaveDirectory: '/x',
+      lastSaveDirectoryBookmark: 'QUJD',
+    );
+    final back = AppSettings.fromJson(s.toJson());
+    expect(back.lastSaveDirectoryBookmark, 'QUJD');
+    expect(
+      back
+          .copyWith(lastSaveDirectory: '/y', lastSaveDirectoryBookmark: '')
+          .lastSaveDirectoryBookmark,
+      '',
+    );
   });
 }

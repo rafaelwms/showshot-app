@@ -56,6 +56,7 @@ class AppSettings {
     this.saveDirectoryBookmark,
     this.saveToLastFolder = false,
     this.lastSaveDirectory = '',
+    this.lastSaveDirectoryBookmark = '',
     this.fileNaming = FileNaming.timestamp,
     this.namePrefix = 'ShowShot',
     this.nameSeparator = NameSeparator.underscore,
@@ -108,6 +109,11 @@ class AppSettings {
 
   /// Directory of the most recent successful save ('' = none yet).
   final String lastSaveDirectory;
+
+  /// macOS (App Sandbox): base64 security-scoped bookmark of
+  /// [lastSaveDirectory] ('' = none). Cleared whenever the last folder
+  /// changes without a fresh bookmark.
+  final String lastSaveDirectoryBookmark;
   final bool copyAfterSave;
 
   /// Output of the "All screens" action.
@@ -183,6 +189,7 @@ class AppSettings {
     bool? askWhereToSave,
     bool? saveToLastFolder,
     String? lastSaveDirectory,
+    String? lastSaveDirectoryBookmark,
     bool? copyAfterSave,
     AllScreensMode? allScreensMode,
     bool? systemNotifications,
@@ -217,6 +224,8 @@ class AppSettings {
       askWhereToSave: askWhereToSave ?? this.askWhereToSave,
       saveToLastFolder: saveToLastFolder ?? this.saveToLastFolder,
       lastSaveDirectory: lastSaveDirectory ?? this.lastSaveDirectory,
+      lastSaveDirectoryBookmark:
+          lastSaveDirectoryBookmark ?? this.lastSaveDirectoryBookmark,
       copyAfterSave: copyAfterSave ?? this.copyAfterSave,
       allScreensMode: allScreensMode ?? this.allScreensMode,
       systemNotifications: systemNotifications ?? this.systemNotifications,
@@ -252,6 +261,7 @@ class AppSettings {
     'askWhereToSave': askWhereToSave,
     'saveToLastFolder': saveToLastFolder,
     'lastSaveDirectory': lastSaveDirectory,
+    'lastSaveDirectoryBookmark': lastSaveDirectoryBookmark,
     'copyAfterSave': copyAfterSave,
     'allScreensMode': allScreensMode.name,
     'systemNotifications': systemNotifications,
@@ -310,6 +320,8 @@ class AppSettings {
       askWhereToSave: json['askWhereToSave'] as bool? ?? true,
       saveToLastFolder: json['saveToLastFolder'] as bool? ?? false,
       lastSaveDirectory: json['lastSaveDirectory'] as String? ?? '',
+      lastSaveDirectoryBookmark:
+          json['lastSaveDirectoryBookmark'] as String? ?? '',
       copyAfterSave: json['copyAfterSave'] as bool? ?? true,
       allScreensMode: AllScreensMode.values.byNameOr(
         json['allScreensMode'],

@@ -161,6 +161,8 @@ abstract class Strings {
   String get askWhereToSaveHint;
   String get saveToLastFolder;
   String get saveToLastFolderHint;
+  String get folderAccessMessage;
+  String get folderAccessPrompt;
   String get fileNaming;
   String get fileNamingTimestamp;
   String get fileNamingSequence;
@@ -491,6 +493,11 @@ class _Pt extends Strings {
   @override
   String get saveToLastFolderHint =>
       'Se a pasta não existir mais, usa a pasta padrão.';
+  @override
+  String get folderAccessMessage =>
+      'Para salvar direto nesta pasta nas próximas capturas, o Show Shot precisa da sua permissão. Clique em Permitir.';
+  @override
+  String get folderAccessPrompt => 'Permitir';
   @override
   String get fileNaming => 'Nome dos arquivos';
   @override
@@ -855,6 +862,11 @@ class _En extends Strings {
   @override
   String get saveToLastFolderHint =>
       'If the folder no longer exists, uses the default folder.';
+  @override
+  String get folderAccessMessage =>
+      'To save straight into this folder on future captures, Show Shot needs your permission. Click Allow.';
+  @override
+  String get folderAccessPrompt => 'Allow';
   @override
   String get fileNaming => 'File names';
   @override

@@ -132,6 +132,14 @@ final class ShoShotNative: NSObject {
         return
       }
       result(resolveDirectoryBookmark(data))
+    case "requestFolderAccess":
+      // NSOpenPanel must run on the main thread; the channel handler already
+      // does, and the reply is sent from the panel's completion handler.
+      requestFolderAccess(
+        path: args["path"] as? String,
+        message: args["message"] as? String,
+        prompt: args["prompt"] as? String,
+        result: result)
     case "getSystemAccent":
       result(currentAccentARGB())
     case "launchInfo":
@@ -154,39 +162,79 @@ final class ShoShotNative: NSObject {
   // Under App Sandbox, a folder picked in NSOpenPanel is only writable for the
   // rest of that launch. A security-scoped bookmark, created while that access
   // is still live and persisted by Dart, restores it on later launches.
-  private var scopedDirectory: URL?
+  // Several folders can be active at once (the configured save folder and the
+  // last used one); they are keyed by path and stay open until the app quits.
+  private var scopedDirectories: [String: URL] = [:]
 
-  private func bookmarkDirectory(path: String) -> FlutterStandardTypedData? {
+  private func bookmarkData(for url: URL) -> FlutterStandardTypedData? {
     do {
-      let data = try URL(fileURLWithPath: path, isDirectory: true).bookmarkData(
+      let data = try url.bookmarkData(
         options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil)
       return FlutterStandardTypedData(bytes: data)
     } catch {
-      NSLog("ShoShot: bookmarkDirectory failed: \(error)")
+      NSLog("ShoShot: bookmarkData failed: \(error)")
       return nil
     }
   }
 
+  private func bookmarkDirectory(path: String) -> FlutterStandardTypedData? {
+    return bookmarkData(for: URL(fileURLWithPath: path, isDirectory: true))
+  }
+
+  /// Starts access to [url] unless that path is already active. False when
+  /// the sandbox refuses.
+  private func beginScopedAccess(_ url: URL) -> Bool {
+    if scopedDirectories[url.path] != nil { return true }
+    guard url.startAccessingSecurityScopedResource() else { return false }
+    scopedDirectories[url.path] = url
+    return true
+  }
+
   /// Resolves the bookmark and starts accessing the folder for the rest of the
-  /// launch (only one custom folder is ever active). Returns `{path, bookmark}`
+  /// launch (other folders stay active). Returns `{path, bookmark}`
   /// — `bookmark` is a refreshed copy when the stored one went stale (folder
   /// moved/renamed), else nil — or nil when it can't be resolved at all.
   private func resolveDirectoryBookmark(_ data: Data) -> [String: Any]? {
     var stale = false
     guard let url = try? URL(resolvingBookmarkData: data, options: .withSecurityScope,
                              relativeTo: nil, bookmarkDataIsStale: &stale),
-          url.startAccessingSecurityScopedResource() else {
+          beginScopedAccess(url) else {
       return nil
     }
-    if let previous = scopedDirectory, previous != url {
-      previous.stopAccessingSecurityScopedResource()
-    }
-    scopedDirectory = url
     var refreshed: FlutterStandardTypedData?
     if stale {
-      refreshed = bookmarkDirectory(path: url.path)
+      refreshed = bookmarkData(for: url)
     }
     return ["path": url.path, "bookmark": refreshed as Any]
+  }
+
+  /// Shows a folder-only open panel (opened inside [path]) whose [prompt]
+  /// button grants persistent access: replies `{path, bookmark}` for the
+  /// folder the user chose (access already started), or nil on cancel.
+  private func requestFolderAccess(path: String?, message: String?, prompt: String?,
+                                   result: @escaping FlutterResult) {
+    let panel = NSOpenPanel()
+    panel.canChooseDirectories = true
+    panel.canChooseFiles = false
+    panel.canCreateDirectories = true
+    panel.allowsMultipleSelection = false
+    if let path = path {
+      panel.directoryURL = URL(fileURLWithPath: path, isDirectory: true)
+    }
+    if let message = message { panel.message = message }
+    if let prompt = prompt { panel.prompt = prompt }
+    NSApp.activate(ignoringOtherApps: true)
+    panel.begin { [weak self] response in
+      guard response == .OK, let self = self, let url = panel.url,
+            let bookmark = self.bookmarkData(for: url) else {
+        result(nil)
+        return
+      }
+      // A user-chosen URL is already accessible; this keeps it so (and
+      // records it) for the rest of the launch.
+      _ = self.beginScopedAccess(url)
+      result(["path": url.path, "bookmark": bookmark])
+    }
   }
 
   // MARK: - System accent color

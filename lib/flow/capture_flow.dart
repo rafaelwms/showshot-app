@@ -85,6 +85,10 @@ class CaptureFlow extends ChangeNotifier with WindowListener {
   bool _permissionMissing = false;
   FlowMessage? _lastMessage;
 
+  /// Set by [_reportHeadless] when a message had no notification to carry it;
+  /// consumed by [_finish].
+  bool _homeForFeedback = false;
+
   FlowStage get stage => _stage;
   CaptureSession? get session => _session;
   EditorDocument? get document => _document;
@@ -264,7 +268,7 @@ class CaptureFlow extends ChangeNotifier with WindowListener {
           image?.dispose();
           _disposeSession();
           if (copyResult != null) {
-            await _report(copyResult);
+            await _reportHeadless(copyResult);
           } else {
             _lastMessage = null;
           }
@@ -337,7 +341,7 @@ class CaptureFlow extends ChangeNotifier with WindowListener {
       } catch (error, stack) {
         debugPrint('Saving all screens failed: $error\n$stack');
         _lastMessage = null;
-        await _report(const FlowMessage(FlowMessageKind.saveFailed));
+        await _reportHeadless(const FlowMessage(FlowMessageKind.saveFailed));
         _setStage(FlowStage.idle);
         await _finish();
         return;
@@ -349,7 +353,7 @@ class CaptureFlow extends ChangeNotifier with WindowListener {
       if (images.length == 1 && current.copyAfterSave) {
         await export.copyToClipboard(images.first);
       }
-      await _report(
+      await _reportHeadless(
         paths.length == 1
             ? FlowMessage(FlowMessageKind.saved, path: paths.first)
             : FlowMessage(
@@ -371,14 +375,14 @@ class CaptureFlow extends ChangeNotifier with WindowListener {
   Future<void> _saveDirect(ui.Image image, {bool copied = false}) async {
     final path = await export.save(image, settings.settings);
     if (path == null) {
-      await _report(const FlowMessage(FlowMessageKind.saveFailed));
+      await _reportHeadless(const FlowMessage(FlowMessageKind.saveFailed));
       return;
     }
     await settings.addRecentFile(path);
     if (!copied && settings.settings.copyAfterSave) {
       await export.copyToClipboard(image);
     }
-    await _report(FlowMessage(FlowMessageKind.saved, path: path));
+    await _reportHeadless(FlowMessage(FlowMessageKind.saved, path: path));
   }
 
   /// Recognizes text in [image] and copies it to the clipboard. Disposes
@@ -470,6 +474,16 @@ class CaptureFlow extends ChangeNotifier with WindowListener {
     final delivered =
         message.kind != FlowMessageKind.captureFailed && await notify(message);
     _lastMessage = delivered ? null : message;
+  }
+
+  /// [_report] for flows that end with no visible window (all screens,
+  /// direct save / copy / text extraction from the overlay): when the OS
+  /// notification wasn't delivered, [_finish] brings Home up so its toast
+  /// shows the message — otherwise the user would see nothing at all. (The
+  /// editor never uses this: it has its own toast, see `_announce`.)
+  Future<void> _reportHeadless(FlowMessage message) async {
+    await _report(message);
+    if (_lastMessage != null) _homeForFeedback = true;
   }
 
   void consumeMessage() {
@@ -582,7 +596,11 @@ class CaptureFlow extends ChangeNotifier with WindowListener {
   }
 
   Future<void> _finish() async {
-    if (_returnToHome || _lastMessage?.kind == FlowMessageKind.captureFailed) {
+    final feedback = _homeForFeedback;
+    _homeForFeedback = false;
+    if (_returnToHome ||
+        feedback ||
+        _lastMessage?.kind == FlowMessageKind.captureFailed) {
       await showHome();
     } else {
       _navigator?.pushNamedAndRemoveUntil('/', (_) => false);

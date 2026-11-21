@@ -6,6 +6,7 @@ import 'package:window_manager/window_manager.dart';
 
 import 'app.dart';
 import 'core/app_scope.dart';
+import 'core/strings.dart';
 import 'debug/debug_server.dart';
 import 'flow/capture_flow.dart';
 import 'services/capture_service.dart';
@@ -31,12 +32,36 @@ Future<void> main(List<String> args) async {
     ..onBookmarkRefreshed = (bookmark) {
       settings.update((s) => s.copyWith(saveDirectoryBookmark: bookmark));
     }
+    ..onLastBookmarkRefreshed = (bookmark) {
+      settings.update((s) => s.copyWith(lastSaveDirectoryBookmark: bookmark));
+    }
+    ..onLastFolderAccess = (directory, bookmark) {
+      settings.update(
+        (s) => s.copyWith(
+          lastSaveDirectory: directory,
+          lastSaveDirectoryBookmark: bookmark,
+        ),
+      );
+    }
+    ..folderAccessTexts = () {
+      final strings = Strings.forLanguage(settings.settings.language);
+      return (
+        message: strings.folderAccessMessage,
+        prompt: strings.folderAccessPrompt,
+      );
+    }
     ..onSequenceAdvanced = (next) {
       settings.update((s) => s.copyWith(sequenceNext: next));
     }
     ..onSaved = (directory) {
       if (settings.settings.lastSaveDirectory != directory) {
-        settings.update((s) => s.copyWith(lastSaveDirectory: directory));
+        // A different folder invalidates the old bookmark ('' = none).
+        settings.update(
+          (s) => s.copyWith(
+            lastSaveDirectory: directory,
+            lastSaveDirectoryBookmark: '',
+          ),
+        );
       }
     };
   final ocr = OcrService(native);

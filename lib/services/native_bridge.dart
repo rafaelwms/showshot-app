@@ -368,6 +368,30 @@ class NativeBridge {
     }
   }
 
+  /// macOS (App Sandbox): shows an open panel (folders only, [path]
+  /// preselected) whose [prompt] button grants the app persistent access to
+  /// the chosen folder. Returns the folder actually chosen (the user may pick
+  /// another one) and its security-scoped bookmark, with access already
+  /// started for this launch; null on cancel, failure or other platforms.
+  Future<({String path, Uint8List bookmark})?> requestFolderAccess({
+    required String path,
+    required String message,
+    required String prompt,
+  }) async {
+    try {
+      final raw = await _channel.invokeMapMethod<String, dynamic>(
+        'requestFolderAccess',
+        {'path': path, 'message': message, 'prompt': prompt},
+      );
+      final chosen = raw?['path'] as String?;
+      final bookmark = raw?['bookmark'] as Uint8List?;
+      if (chosen == null || bookmark == null) return null;
+      return (path: chosen, bookmark: bookmark);
+    } on MissingPluginException {
+      return null;
+    }
+  }
+
   /// Posts an OS notification. True only if the system accepted it — false
   /// when notifications aren't allowed/available, or the platform doesn't
   /// implement it. Never waits on a permission prompt for more than a few
