@@ -50,7 +50,7 @@ Registro combinado com o Rafael em 2026-11-20. Status: `[ ]` pendente, `[~]` em 
   - Decisão 2026-11-21: Phosphor **Regular** como padrão + opção "Ícones em negrito" (Phosphor Bold). Prévia aprovada: https://claude.ai/artifact/RAHtohWtmzvKs7izxXZiWF
   - Implementado em 2026-11-21, falta `flutter pub get`, compilar e testar visualmente: `lib/core/app_icons.dart` (`AppIcons` + tamanhos ópticos), `phosphor_flutter`, `AppSettings.boldIcons` (Configurações > Geral, debug `setting boldIcons`), editor/overlay/barra de título migrados; Home/Configurações seguem Material.
 
-- [ ] **B1 — Distorção da janela ao abrir os menus suspensos das Configurações (Windows arm64, Radxa).** Acontece em todos os dropdowns, inclusive nos da 1.2.0. O menu "…" do editor (`PopupMenuButton`) não distorce. Tentei trocar o `_Dropdown` por `PopupMenuButton`, não resolveu e reverti. Suspeita: algo próprio da tela de Configurações (blur ou camadas) combinado com a GPU Adreno via ANGLE. Falta comparar com o x64 (Desktop). Adiado por decisão do Rafael.
+- [ ] **B1 — Distorção da janela ao abrir os menus suspensos das Configurações (Windows arm64, Radxa).** Acontece em todos os dropdowns, inclusive nos da 1.2.0. O menu "…" do editor (`PopupMenuButton`) não distorce. Tentei trocar o `_Dropdown` por `PopupMenuButton`, não resolveu e reverti. Suspeita: algo próprio da tela de Configurações (blur ou camadas) combinado com a GPU Adreno via ANGLE. Falta comparar com o x64 (Desktop). Adiado por decisão do Rafael. Confirmado de novo na 1.3.0 arm64 (2026-11-21); no macOS não acontece.
 
 ## Ordem de execução
 
@@ -78,6 +78,9 @@ M8 vem antes de M6/M1 para que as ferramentas novas já nasçam com os ícones n
 ## Fechamento da release
 
 > Ordem de validação (2026-11-21), tudo nativo e uma de cada vez: 1. Mac DMG · 2. Mac App Store · 3. Windows arm64 (Radxa) · 4. Linux arm64 (Radxa) · 5. Linux x64 (Desktop) · 6. Windows x64 (Desktop).
+>
+> Progresso: ✅ 1. Mac DMG (notarizado, release em rascunho v1.3.0 no GitHub) · ✅ 2. Mac App Store (build 3 enviado) · ✅ 3. Windows arm64 (MSIX 1.3.0.0 de teste validado pelo Rafael; pacote da Store em `C:\projects\dist` na Radxa, aguardando o código final) · ⏳ 4. Linux arm64 · ⏳ 5. Linux x64 · ⏳ 6. Windows x64.
+> Atenção: DMG, App Store build 3 e o MSIX arm64 são de antes do merge do `develop-linux` (correção das elipses no Linux). Se o código mudar de novo, regenerar todos no fim (App Store build 4).
 >
 > Regra combinada (2026-11-21): o merge no `main` só acontece depois de validar **todas** as plataformas e arquiteturas: macOS arm64, Windows x64, Windows arm64, Linux x64 e Linux arm64.
 
