@@ -13,6 +13,7 @@ const _style = AnnotationStyle(
   filled: true,
   fontSize: 60, // 30 logical px at ratio 2
   smoothing: 0.25,
+  textAlign: TextAlign.center,
 );
 
 ToolMemory _capture({
@@ -33,6 +34,7 @@ void main() {
     expect(m.colorArgb, 0xCC112233);
     expect(m.strokeWidth, 5);
     expect(m.fontSize, 30);
+    expect(m.textAlign, TextAlign.center);
   });
 
   test('restoring at another pixelRatio keeps the logical size', () {
@@ -51,6 +53,40 @@ void main() {
     );
     expect(back.sameAs(m), isTrue);
     expect(back.toolType, ToolType.rect);
+    expect(back.textAlign, TextAlign.center);
+    expect(back.toStyle(2).textAlign, TextAlign.center);
+  });
+
+  test('textAlign defaults to left when missing, unknown or unsupported', () {
+    for (final json in <Map<String, dynamic>>[
+      {},
+      {'textAlign': 'justify'},
+      {'textAlign': 3},
+    ]) {
+      expect(ToolMemory.fromJson(json, 0xFF000000).textAlign, TextAlign.left);
+    }
+    expect(
+      ToolMemory.fromJson({'textAlign': 'right'}, 0xFF000000).textAlign,
+      TextAlign.right,
+    );
+    // Unsupported alignments are stored as left.
+    final m = ToolMemory.capture(
+      tool: ToolType.text,
+      style: _style.copyWith(textAlign: TextAlign.justify),
+      pixelRatio: 1,
+    );
+    expect(m.textAlign, TextAlign.left);
+  });
+
+  test('textLineOffset places lines inside the box', () {
+    expect(textLineOffset(TextAlign.left, 40, 100), 0);
+    expect(textLineOffset(TextAlign.center, 40, 100), 30);
+    expect(textLineOffset(TextAlign.right, 40, 100), 60);
+    // The widest line fills the box: always at 0.
+    expect(textLineOffset(TextAlign.right, 100, 100), 0);
+    expect(textLineOffset(TextAlign.center, 100, 100), 0);
+    // A line wider than the box never gets a negative offset.
+    expect(textLineOffset(TextAlign.center, 120, 100), 0);
   });
 
   test('AppSettings round-trip, default off, old prefs without the keys', () {

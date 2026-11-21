@@ -31,6 +31,7 @@ class AnnotationStyle {
     this.filled = false,
     this.fontSize = 24,
     this.smoothing = 0,
+    this.textAlign = TextAlign.left,
   });
 
   final Color color;
@@ -43,6 +44,12 @@ class AnnotationStyle {
   /// to 1 (strongest). Ignored by every other tool.
   final double smoothing;
 
+  /// Horizontal alignment of the lines inside a text annotation's box. Only
+  /// [TextAlign.left], [TextAlign.center] and [TextAlign.right] are used;
+  /// ignored by every other tool. The box itself (anchor, width = widest
+  /// line) does not depend on it, so changing it never moves the text.
+  final TextAlign textAlign;
+
   Color get effectiveColor => color.withValues(alpha: color.a * opacity);
 
   AnnotationStyle copyWith({
@@ -52,6 +59,7 @@ class AnnotationStyle {
     bool? filled,
     double? fontSize,
     double? smoothing,
+    TextAlign? textAlign,
   }) {
     return AnnotationStyle(
       color: color ?? this.color,
@@ -60,7 +68,26 @@ class AnnotationStyle {
       filled: filled ?? this.filled,
       fontSize: fontSize ?? this.fontSize,
       smoothing: smoothing ?? this.smoothing,
+      textAlign: textAlign ?? this.textAlign,
     );
+  }
+}
+
+/// X offset, inside a text box [boxWidth] wide, at which a line [lineWidth]
+/// wide starts for [align]. This is what the text layout does for each line
+/// (the box is as wide as the widest line, so that line is always at 0);
+/// kept as a pure function so the rule is documented and unit-tested.
+/// Anything other than center/right behaves as left.
+double textLineOffset(TextAlign align, double lineWidth, double boxWidth) {
+  final free = math.max(0.0, boxWidth - lineWidth);
+  switch (align) {
+    case TextAlign.center:
+      return free / 2;
+    case TextAlign.right:
+    case TextAlign.end:
+      return free;
+    default:
+      return 0;
   }
 }
 
@@ -752,6 +779,9 @@ class TextAnnotation extends Annotation {
     final painter = TextPainter(
       text: TextSpan(text: text.isEmpty ? ' ' : text, style: textStyle(style)),
       textDirection: TextDirection.ltr,
+      // Without a max width the layout is as wide as the widest line, so
+      // the alignment only reflows the shorter lines inside that box.
+      textAlign: style.textAlign,
     )..layout();
     return painter;
   }

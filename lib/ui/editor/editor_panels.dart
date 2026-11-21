@@ -345,6 +345,17 @@ class PropertiesBar extends StatelessWidget {
                 style.copyWith(fontSize: (v * ratio).roundToDouble()),
               ),
             ),
+            const SizedBox(width: 8),
+            _AlignSegmented(
+              value: style.textAlign,
+              labels: (
+                strings.alignLeft,
+                strings.alignCenter,
+                strings.alignRight,
+              ),
+              onChanged: (a) =>
+                  controller.setStyle(style.copyWith(textAlign: a)),
+            ),
           ],
           if (selected != null) ...[
             const _BarDivider(),
@@ -839,6 +850,41 @@ class _HueSlider extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+/// Compact left/center/right segmented control for text alignment.
+class _AlignSegmented extends StatelessWidget {
+  const _AlignSegmented({
+    required this.value,
+    required this.labels,
+    required this.onChanged,
+  });
+
+  final TextAlign value;
+  final (String, String, String) labels;
+  final ValueChanged<TextAlign> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget button(IconData icon, String tooltip, TextAlign align) {
+      return ToolButton(
+        icon: icon,
+        tooltip: tooltip,
+        active: value == align,
+        size: 32,
+        onPressed: () => onChanged(align),
+      );
+    }
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        button(Icons.format_align_left_rounded, labels.$1, TextAlign.left),
+        button(Icons.format_align_center_rounded, labels.$2, TextAlign.center),
+        button(Icons.format_align_right_rounded, labels.$3, TextAlign.right),
+      ],
     );
   }
 }

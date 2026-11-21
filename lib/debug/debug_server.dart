@@ -222,6 +222,19 @@ class DebugCommandServer {
             ),
           );
           return 'ok';
+        case 'align':
+          // `align left|center|right`: text alignment (selection/editing too).
+          final editor = DebugHooks.editor;
+          if (editor == null) return 'no editor';
+          final align = switch (parts.elementAtOrNull(1)) {
+            'left' => TextAlign.left,
+            'center' => TextAlign.center,
+            'right' => TextAlign.right,
+            _ => null,
+          };
+          if (align == null) return 'usage: align left|center|right';
+          editor.setStyle(editor.style.copyWith(textAlign: align));
+          return 'ok';
         case 'smooth':
           // `smooth 0..1`: curve smoothing for the pen/marker (and selection).
           final editor = DebugHooks.editor;
@@ -371,7 +384,7 @@ class DebugCommandServer {
               '${a.id}:${a.runtimeType} rot=${a.rotation.toStringAsFixed(3)} '
                   'bounds=${a.bounds.left.toStringAsFixed(1)},${a.bounds.top.toStringAsFixed(1)},'
                   '${a.bounds.width.toStringAsFixed(1)}x${a.bounds.height.toStringAsFixed(1)}'
-                  '${a is TextAnnotation ? ' font=${a.style.fontSize.toStringAsFixed(1)} pos=${o(a.position)}' : ''}'
+                  '${a is TextAnnotation ? ' font=${a.style.fontSize.toStringAsFixed(1)} pos=${o(a.position)} align=${a.style.textAlign.name}' : ''}'
                   '${a is ShapeAnnotation ? ' start=${o(a.start)} end=${o(a.end)}' : ''}',
           ];
           final sel = editor.selected;

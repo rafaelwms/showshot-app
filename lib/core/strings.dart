@@ -91,6 +91,9 @@ abstract class Strings {
   String get strokeWidth;
   String get smoothing;
   String get smoothingOff;
+  String get alignLeft;
+  String get alignCenter;
+  String get alignRight;
   String get opacity;
   String get fill;
   String get fontSize;
@@ -325,6 +328,12 @@ class _Pt extends Strings {
   String get smoothing => 'Suavizar curvas';
   @override
   String get smoothingOff => 'Desl.';
+  @override
+  String get alignLeft => 'Alinhar à esquerda';
+  @override
+  String get alignCenter => 'Centralizar';
+  @override
+  String get alignRight => 'Alinhar à direita';
   @override
   String get opacity => 'Transparência';
   @override
@@ -674,6 +683,12 @@ class _En extends Strings {
   String get smoothing => 'Smooth curves';
   @override
   String get smoothingOff => 'Off';
+  @override
+  String get alignLeft => 'Align left';
+  @override
+  String get alignCenter => 'Align center';
+  @override
+  String get alignRight => 'Align right';
   @override
   String get opacity => 'Opacity';
   @override

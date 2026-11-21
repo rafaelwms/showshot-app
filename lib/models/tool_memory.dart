@@ -21,6 +21,7 @@ class ToolMemory {
     required this.filled,
     required this.fontSize,
     required this.smoothing,
+    this.textAlign = TextAlign.left,
   });
 
   /// Tools never restored as the starting tool: the OCR region tool is a
@@ -39,6 +40,9 @@ class ToolMemory {
   /// Logical (UI) font size.
   final double fontSize;
   final double smoothing;
+
+  /// Text alignment (left, center or right only).
+  final TextAlign textAlign;
 
   // Same ranges as the properties bar sliders.
   static const _minWidth = 1.0, _maxWidth = 24.0;
@@ -62,8 +66,12 @@ class ToolMemory {
       filled: style.filled,
       fontSize: style.fontSize / ratio,
       smoothing: style.smoothing,
+      textAlign: _sanitizeAlign(style.textAlign),
     );
   }
+
+  static TextAlign _sanitizeAlign(TextAlign a) =>
+      a == TextAlign.center || a == TextAlign.right ? a : TextAlign.left;
 
   /// The remembered tool, or null when none is stored, the name is unknown
   /// (old/foreign prefs) or the tool is transient.
@@ -86,6 +94,7 @@ class ToolMemory {
       filled: filled,
       fontSize: (fontSize.clamp(_minFont, _maxFont) * ratio).roundToDouble(),
       smoothing: smoothing.clamp(0.0, 1.0).toDouble(),
+      textAlign: textAlign,
     );
   }
 
@@ -98,7 +107,8 @@ class ToolMemory {
       other.opacity == opacity &&
       other.filled == filled &&
       (other.fontSize - fontSize).abs() < 1e-6 &&
-      other.smoothing == smoothing;
+      other.smoothing == smoothing &&
+      other.textAlign == textAlign;
 
   Map<String, dynamic> toJson() => {
     'tool': tool,
@@ -108,6 +118,7 @@ class ToolMemory {
     'filled': filled,
     'fontSize': fontSize,
     'smoothing': smoothing,
+    'textAlign': textAlign.name,
   };
 
   /// Lenient parse: anything missing or of the wrong type falls back to the
@@ -128,6 +139,12 @@ class ToolMemory {
       filled: json['filled'] is bool ? json['filled'] as bool : false,
       fontSize: math.max(0.0, number('fontSize', 20)),
       smoothing: number('smoothing', 0),
+      // Missing or unknown values (old prefs, tampering) mean left.
+      textAlign: switch (json['textAlign']) {
+        'center' => TextAlign.center,
+        'right' => TextAlign.right,
+        _ => TextAlign.left,
+      },
     );
   }
 }

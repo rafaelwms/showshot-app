@@ -778,7 +778,13 @@ class _TextEditorBoxState extends State<_TextEditorBox> {
     return Focus(
       onKeyEvent: _onKey,
       child: Container(
-        constraints: BoxConstraints(minWidth: 80, maxWidth: widget.maxWidth),
+        // The box's left edge is the text's anchor. A centered/right-aligned
+        // line sits relative to the field's width, so a minimum width would
+        // shift the text away from where the committed painter puts it.
+        constraints: BoxConstraints(
+          minWidth: style.textAlign == TextAlign.left ? 80 : 0,
+          maxWidth: widget.maxWidth,
+        ),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(4),
           border: Border.all(color: AppColors.cyan, width: 1.5),
@@ -789,6 +795,7 @@ class _TextEditorBoxState extends State<_TextEditorBox> {
             controller: _text,
             focusNode: _focus,
             maxLines: null,
+            textAlign: style.textAlign,
             cursorColor: AppColors.cyan,
             style: TextAnnotation.textStyle(style),
             decoration: InputDecoration(
@@ -798,7 +805,14 @@ class _TextEditorBoxState extends State<_TextEditorBox> {
               enabledBorder: InputBorder.none,
               focusedBorder: InputBorder.none,
               contentPadding: const EdgeInsets.all(6),
-              hintText: strings.textPlaceholder,
+              // InputDecorator measures the hint even when it's hidden; for
+              // centered/right text that would widen the field past the
+              // painter's width and shift the lines until commit.
+              hintText:
+                  style.textAlign == TextAlign.left ||
+                      widget.annotation.text.isEmpty
+                  ? strings.textPlaceholder
+                  : null,
               hintStyle: TextAnnotation.textStyle(style.copyWith(opacity: 0.4)),
             ),
             onChanged: widget.onChanged,
