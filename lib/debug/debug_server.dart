@@ -293,6 +293,7 @@ class DebugCommandServer {
               ),
               'magnifier' => s.copyWith(showMagnifier: value),
               'rememberTools' => s.copyWith(rememberTools: value),
+              'boldIcons' => s.copyWith(boldIcons: value),
               'taskbar' => s.copyWith(showTaskbarIcon: value),
               'jpg' => s.copyWith(
                 saveFormat: value ? ImageFormat.jpg : ImageFormat.png,

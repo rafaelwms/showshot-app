@@ -72,6 +72,15 @@ flutter:
 
   uses-material-design: true
 
+  # Phosphor icons (MIT), bundled directly: see lib/core/phosphor_glyphs.dart.
+  fonts:
+    - family: Phosphor
+      fonts:
+        - asset: assets/fonts/phosphor/Phosphor.ttf
+    - family: Phosphor-Bold
+      fonts:
+        - asset: assets/fonts/phosphor/Phosphor-Bold.ttf
+
   assets:
     - assets/tray/
     - assets/branding/

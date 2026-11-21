@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:window_manager/window_manager.dart';
 
+import '../../core/app_icons.dart';
 import '../../core/theme.dart';
 
 /// Rounded, translucent panel used for floating toolbars.
@@ -118,12 +119,14 @@ class AccentButton extends StatelessWidget {
     required this.onPressed,
     this.icon,
     this.compact = false,
+    this.iconSize = 17,
   });
 
   final String label;
   final VoidCallback? onPressed;
   final IconData? icon;
   final bool compact;
+  final double iconSize;
 
   @override
   Widget build(BuildContext context) {
@@ -155,7 +158,7 @@ class AccentButton extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 if (icon != null) ...[
-                  Icon(icon, size: 17, color: Colors.white),
+                  Icon(icon, size: iconSize, color: Colors.white),
                   const SizedBox(width: 8),
                 ],
                 Text(
@@ -184,6 +187,7 @@ class GhostButton extends StatelessWidget {
     this.icon,
     this.danger = false,
     this.compact = false,
+    this.iconSize = 17,
   });
 
   final String label;
@@ -191,6 +195,7 @@ class GhostButton extends StatelessWidget {
   final IconData? icon;
   final bool danger;
   final bool compact;
+  final double iconSize;
 
   @override
   Widget build(BuildContext context) {
@@ -218,7 +223,7 @@ class GhostButton extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               if (icon != null) ...[
-                Icon(icon, size: 17, color: color),
+                Icon(icon, size: iconSize, color: color),
                 const SizedBox(width: 8),
               ],
               Text(
@@ -294,6 +299,7 @@ class WindowTitleBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isMac = Platform.isMacOS;
+    final icons = AppIcons.of(context);
     return SizedBox(
       height: height,
       child: Stack(
@@ -334,11 +340,11 @@ class WindowTitleBar extends StatelessWidget {
                   if (!isMac) ...[
                     const SizedBox(width: 8),
                     _WindowButton(
-                      icon: Icons.remove_rounded,
+                      icon: icons.minimize,
                       onTap: () => windowManager.minimize(),
                     ),
                     _WindowButton(
-                      icon: Icons.crop_square_rounded,
+                      icon: icons.maximize,
                       onTap: () async {
                         if (await windowManager.isMaximized()) {
                           await windowManager.unmaximize();
@@ -348,7 +354,7 @@ class WindowTitleBar extends StatelessWidget {
                       },
                     ),
                     _WindowButton(
-                      icon: Icons.close_rounded,
+                      icon: icons.close,
                       danger: true,
                       onTap: onClose ?? () => windowManager.close(),
                     ),
@@ -387,7 +393,11 @@ class _WindowButton extends StatelessWidget {
         child: SizedBox(
           width: 34,
           height: 30,
-          child: Icon(icon, size: 16, color: context.palette.textMuted),
+          child: Icon(
+            icon,
+            size: AppIcons.windowButtonSize,
+            color: context.palette.textMuted,
+          ),
         ),
       ),
     );

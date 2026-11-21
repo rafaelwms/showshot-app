@@ -1,7 +1,6 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 
+import '../../core/app_icons.dart';
 import '../../core/strings.dart';
 import '../../core/theme.dart';
 import '../../models/annotation.dart';
@@ -9,43 +8,27 @@ import '../widgets/common.dart';
 import 'editor_controller.dart';
 
 class _ToolSpec {
-  const _ToolSpec(
-    this.tool,
-    this.icon,
-    this.shortcut, {
-    this.angle = 0,
-    this.customIcon,
-  });
+  const _ToolSpec(this.tool, this.icon, this.shortcut);
   final ToolType tool;
-  final IconData? icon;
+  final IconData icon;
   final String shortcut;
-  final double angle;
-
-  /// For glyphs the Material icon set doesn't have (used instead of [icon]).
-  final Widget Function(Color color, double size)? customIcon;
 }
 
-Widget _cursorIcon(Color color, double size) =>
-    _CursorIcon(color: color, size: size);
-
-const _tools = <_ToolSpec>[
-  _ToolSpec(ToolType.select, null, 'V', customIcon: _cursorIcon),
-  _ToolSpec(ToolType.hand, Icons.back_hand_outlined, 'H'),
-  _ToolSpec(ToolType.arrow, Icons.north_east_rounded, 'A'),
-  _ToolSpec(
-    ToolType.line,
-    Icons.horizontal_rule_rounded,
-    'L',
-    angle: -math.pi / 4,
-  ),
-  _ToolSpec(ToolType.rect, Icons.crop_square_rounded, 'R'),
-  _ToolSpec(ToolType.ellipse, Icons.circle_outlined, 'E'),
-  _ToolSpec(ToolType.pen, Icons.draw_rounded, 'P'),
-  _ToolSpec(ToolType.marker, Icons.brush_rounded, 'M'),
-  _ToolSpec(ToolType.text, Icons.title_rounded, 'T'),
-  _ToolSpec(ToolType.number, Icons.pin_rounded, 'N'),
-  _ToolSpec(ToolType.blur, Icons.blur_on_rounded, 'B'),
-  _ToolSpec(ToolType.ocr, Icons.text_fields_rounded, 'O'),
+/// The rail's tools, in order, with icons of the current weight.
+List<_ToolSpec> _toolSpecs(AppIcons i) => [
+  _ToolSpec(ToolType.select, i.select, 'V'),
+  _ToolSpec(ToolType.hand, i.hand, 'H'),
+  _ToolSpec(ToolType.arrow, i.arrow, 'A'),
+  // lineSegment is already drawn on the diagonal: no extra rotation.
+  _ToolSpec(ToolType.line, i.line, 'L'),
+  _ToolSpec(ToolType.rect, i.rect, 'R'),
+  _ToolSpec(ToolType.ellipse, i.ellipse, 'E'),
+  _ToolSpec(ToolType.pen, i.pen, 'P'),
+  _ToolSpec(ToolType.marker, i.marker, 'M'),
+  _ToolSpec(ToolType.text, i.text, 'T'),
+  _ToolSpec(ToolType.number, i.number, 'N'),
+  _ToolSpec(ToolType.blur, i.blur, 'B'),
+  _ToolSpec(ToolType.ocr, i.ocr, 'O'),
 ];
 
 String toolName(Strings strings, ToolType tool) => switch (tool) {
@@ -72,6 +55,7 @@ class ToolRail extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final strings = Strings.of(context);
+    final tools = _toolSpecs(AppIcons.of(context));
     return GlassPanel(
       padding: const EdgeInsets.all(6),
       radius: 14,
@@ -84,18 +68,15 @@ class ToolRail extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            for (var i = 0; i < _tools.length; i++) ...[
+            for (var i = 0; i < tools.length; i++) ...[
               if (i == 2 || i == 8) const _RailDivider(),
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 1),
-                child: Transform.rotate(
-                  angle: 0,
-                  child: _RailButton(
-                    spec: _tools[i],
-                    label: toolName(strings, _tools[i].tool),
-                    active: controller.tool == _tools[i].tool,
-                    onPressed: () => controller.setTool(_tools[i].tool),
-                  ),
+                child: _RailButton(
+                  spec: tools[i],
+                  label: toolName(strings, tools[i].tool),
+                  active: controller.tool == tools[i].tool,
+                  onPressed: () => controller.setTool(tools[i].tool),
                 ),
               ),
             ],
@@ -138,81 +119,16 @@ class _RailButton extends StatelessWidget {
               gradient: active ? context.palette.accentGradient : null,
               borderRadius: BorderRadius.circular(10),
             ),
-            child: Transform.rotate(
-              angle: spec.angle,
-              child: () {
-                final color = active ? Colors.white : context.palette.textMuted;
-                return spec.customIcon?.call(color, 19) ??
-                    Icon(spec.icon, size: 19, color: color);
-              }(),
+            child: Icon(
+              spec.icon,
+              size: AppIcons.railSize,
+              color: active ? Colors.white : context.palette.textMuted,
             ),
           ),
         ),
       ),
     );
   }
-}
-
-/// The classic mouse-pointer arrow. Material has no cursor glyph, and its
-/// arrows (`north_west`, `near_me`…) read as the Arrow tool sitting right
-/// below the Select tool in the rail.
-class _CursorIcon extends StatelessWidget {
-  const _CursorIcon({required this.color, required this.size});
-
-  final Color color;
-  final double size;
-
-  @override
-  Widget build(BuildContext context) => SizedBox.square(
-    dimension: size,
-    child: CustomPaint(painter: _CursorPainter(color)),
-  );
-}
-
-class _CursorPainter extends CustomPainter {
-  const _CursorPainter(this.color);
-
-  final Color color;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    // Drawn in a 24x24 box: tip at the top-left, tail pointing down-right.
-    canvas.scale(size.width / 24, size.height / 24);
-    // Material glyphs leave ~2px of padding inside their 24px box; this path
-    // fills it, so shrink it about its center to match the neighbouring icons.
-    canvas.translate(12, 12);
-    canvas.scale(0.6);
-    canvas.translate(-12.1, -12.2);
-    final path = Path()
-      ..moveTo(5.5, 2.8)
-      ..lineTo(5.5, 19.4)
-      ..lineTo(9.9, 15.4)
-      ..lineTo(12.9, 21.6)
-      ..lineTo(15.9, 20.2)
-      ..lineTo(12.9, 14.2)
-      ..lineTo(18.7, 13.9)
-      ..close();
-    canvas.drawPath(
-      path,
-      Paint()
-        ..color = color
-        ..style = PaintingStyle.fill
-        ..isAntiAlias = true,
-    );
-    // A thin same-color outline rounds the corners.
-    canvas.drawPath(
-      path,
-      Paint()
-        ..color = color
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.4
-        ..strokeJoin = StrokeJoin.round
-        ..isAntiAlias = true,
-    );
-  }
-
-  @override
-  bool shouldRepaint(_CursorPainter old) => old.color != color;
 }
 
 class _RailDivider extends StatelessWidget {
@@ -238,6 +154,7 @@ class PropertiesBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final strings = Strings.of(context);
+    final icons = AppIcons.of(context);
     final style = controller.style;
     final tool = controller.tool;
     final selected = controller.selected;
@@ -281,7 +198,7 @@ class PropertiesBar extends StatelessWidget {
             const _BarDivider(),
           ],
           _LabeledSlider(
-            icon: Icons.line_weight_rounded,
+            icon: icons.strokeWidth,
             label: targetIsBlur ? strings.toolBlur : strings.strokeWidth,
             value: (style.strokeWidth / ratio).clamp(1, 24),
             min: 1,
@@ -294,7 +211,7 @@ class PropertiesBar extends StatelessWidget {
           if (targetIsFreehand) ...[
             const _BarDivider(),
             _LabeledSlider(
-              icon: Icons.waves_rounded,
+              icon: icons.smoothing,
               label: strings.smoothing,
               value: style.smoothing,
               min: 0,
@@ -310,7 +227,7 @@ class PropertiesBar extends StatelessWidget {
           if (!targetIsBlur) ...[
             const _BarDivider(),
             _LabeledSlider(
-              icon: Icons.opacity_rounded,
+              icon: icons.opacity,
               label: strings.opacity,
               value: style.opacity,
               min: 0.1,
@@ -322,9 +239,8 @@ class PropertiesBar extends StatelessWidget {
           if (targetIsShape) ...[
             const _BarDivider(),
             ToolButton(
-              icon: style.filled
-                  ? Icons.format_color_fill_rounded
-                  : Icons.format_color_reset_outlined,
+              icon: style.filled ? icons.fill : icons.noFill,
+              iconSize: AppIcons.buttonSize,
               tooltip: strings.fill,
               active: style.filled,
               size: 32,
@@ -335,7 +251,7 @@ class PropertiesBar extends StatelessWidget {
           if (targetIsText) ...[
             const _BarDivider(),
             _LabeledSlider(
-              icon: Icons.format_size_rounded,
+              icon: icons.fontSize,
               label: strings.fontSize,
               value: (style.fontSize / ratio).clamp(8, 96),
               min: 8,
@@ -360,7 +276,8 @@ class PropertiesBar extends StatelessWidget {
           if (selected != null) ...[
             const _BarDivider(),
             ToolButton(
-              icon: Icons.delete_outline_rounded,
+              icon: icons.delete,
+              iconSize: AppIcons.buttonSize,
               tooltip: strings.delete,
               shortcut: 'Del',
               size: 32,
@@ -494,7 +411,11 @@ class _CustomColorButton extends StatelessWidget {
                       ),
                     ),
                   )
-                : const Icon(Icons.add_rounded, size: 14, color: Colors.white),
+                : Icon(
+                    AppIcons.of(context).add,
+                    size: AppIcons.tinySize,
+                    color: Colors.white,
+                  ),
           ),
         ),
       ),
@@ -528,7 +449,11 @@ class _LabeledSlider extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 16, color: context.palette.textMuted),
+          Icon(
+            icon,
+            size: AppIcons.inlineSize,
+            color: context.palette.textMuted,
+          ),
           SizedBox(
             width: 110,
             child: Slider(
@@ -569,6 +494,7 @@ class ZoomControls extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final strings = Strings.of(context);
+    final icons = AppIcons.of(context);
     return GlassPanel(
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
       radius: 12,
@@ -576,7 +502,8 @@ class ZoomControls extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           ToolButton(
-            icon: Icons.remove_rounded,
+            icon: icons.remove,
+            iconSize: AppIcons.buttonSize,
             tooltip: strings.zoomOut,
             size: 30,
             onPressed: () => controller.zoomBy(0.8, viewportSize()),
@@ -602,13 +529,15 @@ class ZoomControls extends StatelessWidget {
             ),
           ),
           ToolButton(
-            icon: Icons.add_rounded,
+            icon: icons.add,
+            iconSize: AppIcons.buttonSize,
             tooltip: strings.zoomIn,
             size: 30,
             onPressed: () => controller.zoomBy(1.25, viewportSize()),
           ),
           ToolButton(
-            icon: Icons.fit_screen_rounded,
+            icon: icons.fitScreen,
+            iconSize: AppIcons.buttonSize,
             tooltip: strings.zoomFit,
             size: 30,
             onPressed: () => controller.fitTo(viewportSize()),
@@ -871,6 +800,7 @@ class _AlignSegmented extends StatelessWidget {
     Widget button(IconData icon, String tooltip, TextAlign align) {
       return ToolButton(
         icon: icon,
+        iconSize: AppIcons.buttonSize,
         tooltip: tooltip,
         active: value == align,
         size: 32,
@@ -878,12 +808,13 @@ class _AlignSegmented extends StatelessWidget {
       );
     }
 
+    final icons = AppIcons.of(context);
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        button(Icons.format_align_left_rounded, labels.$1, TextAlign.left),
-        button(Icons.format_align_center_rounded, labels.$2, TextAlign.center),
-        button(Icons.format_align_right_rounded, labels.$3, TextAlign.right),
+        button(icons.alignLeft, labels.$1, TextAlign.left),
+        button(icons.alignCenter, labels.$2, TextAlign.center),
+        button(icons.alignRight, labels.$3, TextAlign.right),
       ],
     );
   }

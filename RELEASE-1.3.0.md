@@ -39,8 +39,9 @@ Registro combinado com o Rafael em 2026-11-20. Status: `[ ]` pendente, `[~]` em 
 - [x] **M7 — Editor: alinhamento do texto.** Esquerda/centro/direita (justificar a decidir) na ferramenta Texto e alterável pela ferramenta Seleção (barra de propriedades).
   - ✅ 2026-11-21 aprovado pelo Rafael no Windows arm64 (MSIX 1.2.0.4).
   - Implementado em 2026-11-21, falta compilar e testar manualmente: `AnnotationStyle.textAlign` (+ `ToolMemory`), controle de 3 botões na barra, `TextField.textAlign`, `align` no debug server; justificar fora do escopo.
-- [ ] **M8 — Editor: ícones homogêneos.** Uma única família de ícones, mesmo peso, grade e tamanho óptico, substituindo a mistura atual (Material + pintados à mão, ex.: `_CursorIcon`).
+- [~] **M8 — Editor: ícones homogêneos.** Uma única família de ícones, mesmo peso, grade e tamanho óptico, substituindo a mistura atual (Material + pintados à mão, ex.: `_CursorIcon`).
   - Decisão 2026-11-21: Phosphor **Regular** como padrão + opção "Ícones em negrito" (Phosphor Bold). Prévia aprovada: https://claude.ai/artifact/RAHtohWtmzvKs7izxXZiWF
+  - Implementado em 2026-11-21, falta `flutter pub get`, compilar e testar visualmente: `lib/core/app_icons.dart` (`AppIcons` + tamanhos ópticos), `phosphor_flutter`, `AppSettings.boldIcons` (Configurações > Geral, debug `setting boldIcons`), editor/overlay/barra de título migrados; Home/Configurações seguem Material.
 
 - [ ] **B1 — Distorção da janela ao abrir os menus suspensos das Configurações (Windows arm64, Radxa).** Acontece em todos os dropdowns, inclusive nos da 1.2.0. O menu "…" do editor (`PopupMenuButton`) não distorce. Tentei trocar o `_Dropdown` por `PopupMenuButton`, não resolveu e reverti. Suspeita: algo próprio da tela de Configurações (blur ou camadas) combinado com a GPU Adreno via ANGLE. Falta comparar com o x64 (Desktop). Adiado por decisão do Rafael.
 

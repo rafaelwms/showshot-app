@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import 'core/app_icons.dart';
 import 'core/app_scope.dart';
 import 'core/theme.dart';
 import 'ui/editor/editor_screen.dart';
@@ -22,22 +23,32 @@ class ShoShotApp extends StatelessWidget {
         listenable: Listenable.merge([services.settings, services.systemTheme]),
         builder: (context, _) {
           final accent = services.systemTheme.accent.color;
-          return MaterialApp(
-            title: 'Show Shot',
-            debugShowCheckedModeBanner: false,
-            navigatorKey: services.flow.navigatorKey,
-            scaffoldMessengerKey: services.flow.messengerKey,
-            theme: AppTheme.build(brightness: Brightness.light, accent: accent),
-            darkTheme: AppTheme.build(
-              brightness: Brightness.dark,
-              accent: accent,
+          // Above the Navigator so every route (and dialog) sees the icon
+          // weight and rebuilds when the setting changes.
+          return AppIconsScope(
+            icons: services.settings.settings.boldIcons
+                ? AppIcons.boldWeight
+                : AppIcons.regular,
+            child: MaterialApp(
+              title: 'Show Shot',
+              debugShowCheckedModeBanner: false,
+              navigatorKey: services.flow.navigatorKey,
+              scaffoldMessengerKey: services.flow.messengerKey,
+              theme: AppTheme.build(
+                brightness: Brightness.light,
+                accent: accent,
+              ),
+              darkTheme: AppTheme.build(
+                brightness: Brightness.dark,
+                accent: accent,
+              ),
+              // Follows the OS setting — Flutter's engine already detects this
+              // on macOS/Windows/Linux, no native code of our own needed.
+              themeMode: ThemeMode.system,
+              initialRoute: '/',
+              onGenerateRoute: _onGenerateRoute,
+              builder: Platform.isLinux ? _roundCorners : null,
             ),
-            // Follows the OS setting — Flutter's engine already detects this
-            // on macOS/Windows/Linux, no native code of our own needed.
-            themeMode: ThemeMode.system,
-            initialRoute: '/',
-            onGenerateRoute: _onGenerateRoute,
-            builder: Platform.isLinux ? _roundCorners : null,
           );
         },
       ),

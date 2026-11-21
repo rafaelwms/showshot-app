@@ -5,6 +5,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/app_icons.dart';
 import '../../core/app_scope.dart';
 import '../../core/strings.dart';
 import '../../core/theme.dart';
@@ -539,9 +540,9 @@ class _OverlayScreenState extends State<OverlayScreen> {
               ),
             ],
           ),
-          child: const Icon(
-            Icons.photo_camera_rounded,
-            size: 15,
+          child: Icon(
+            AppIcons.of(context).camera,
+            size: AppIcons.badgeSize,
             color: Colors.white,
           ),
         ),
@@ -575,9 +576,9 @@ class _OverlayScreenState extends State<OverlayScreen> {
                 children: [
                   Icon(
                     isWindowMode
-                        ? Icons.web_asset_rounded
-                        : Icons.highlight_alt_rounded,
-                    size: 16,
+                        ? AppIcons.of(context).appWindow
+                        : AppIcons.of(context).selection,
+                    size: AppIcons.hintSize,
                     color: AppColors.cyan,
                   ),
                   const SizedBox(width: 8),
@@ -642,6 +643,7 @@ class _OverlayScreenState extends State<OverlayScreen> {
         .clamp(8.0, math.max(8.0, size.width - estimatedWidth - 8))
         .toDouble();
     final command = Platform.isMacOS ? '⌘' : 'Ctrl+';
+    final icons = AppIcons.of(context);
 
     return Positioned(
       left: left,
@@ -654,7 +656,8 @@ class _OverlayScreenState extends State<OverlayScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             ToolButton(
-              icon: Icons.close_rounded,
+              icon: icons.close,
+              iconSize: AppIcons.buttonSize,
               tooltip: strings.cancel,
               shortcut: 'Esc',
               onPressed: () => _finish(OverlayAction.cancel),
@@ -664,7 +667,8 @@ class _OverlayScreenState extends State<OverlayScreen> {
               // Text mode has a single purpose: confirming copies the
               // recognized text straight to the clipboard.
               ToolButton(
-                icon: Icons.check_rounded,
+                icon: icons.confirm,
+                iconSize: AppIcons.buttonSize,
                 tooltip: strings.extractText,
                 shortcut: 'Enter',
                 active: true,
@@ -673,21 +677,24 @@ class _OverlayScreenState extends State<OverlayScreen> {
             else ...[
               const SizedBox(width: 2),
               ToolButton(
-                icon: Icons.save_alt_rounded,
+                icon: icons.save,
+                iconSize: AppIcons.buttonSize,
                 tooltip: strings.save,
                 shortcut: '${command}S',
                 onPressed: () => _finish(OverlayAction.save),
               ),
               const SizedBox(width: 2),
               ToolButton(
-                icon: Icons.copy_rounded,
+                icon: icons.copy,
+                iconSize: AppIcons.buttonSize,
                 tooltip: strings.copy,
                 shortcut: '${command}C',
                 onPressed: () => _finish(OverlayAction.copy),
               ),
               const SizedBox(width: 2),
               ToolButton(
-                icon: Icons.text_fields_rounded,
+                icon: icons.extractText,
+                iconSize: AppIcons.buttonSize,
                 tooltip: strings.extractText,
                 shortcut: '${command}T',
                 onPressed: () => _finish(OverlayAction.extractText),
@@ -699,7 +706,8 @@ class _OverlayScreenState extends State<OverlayScreen> {
                 color: context.palette.borderStrong,
               ),
               ToolButton(
-                icon: Icons.brush_rounded,
+                icon: icons.edit,
+                iconSize: AppIcons.buttonSize,
                 tooltip: strings.edit,
                 shortcut: '${command}E',
                 active: true,

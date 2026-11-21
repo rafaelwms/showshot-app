@@ -57,6 +57,8 @@ abstract class Strings {
   String get editorWindowFullScreen;
   String get rememberTools;
   String get rememberToolsHint;
+  String get boldIcons;
+  String get boldIconsHint;
   String get hideWindow;
 
   // Overlay
@@ -266,6 +268,10 @@ class _Pt extends Strings {
   @override
   String get rememberToolsHint =>
       'Cor, espessura e a última ferramenta usada voltam na próxima captura.';
+  @override
+  String get boldIcons => 'Ícones em negrito';
+  @override
+  String get boldIconsHint => 'Traço mais grosso nos ícones do editor.';
   @override
   String get hideWindow => 'Ocultar janela';
 
@@ -621,6 +627,10 @@ class _En extends Strings {
   @override
   String get rememberToolsHint =>
       'Color, width and the last tool used come back on the next capture.';
+  @override
+  String get boldIcons => 'Bold icons';
+  @override
+  String get boldIconsHint => 'Thicker strokes for the editor icons.';
   @override
   String get hideWindow => 'Hide window';
 

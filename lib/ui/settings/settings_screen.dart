@@ -217,6 +217,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                       ),
                                     ),
                                   ),
+                                  _SettingRow(
+                                    title: strings.boldIcons,
+                                    subtitle: strings.boldIconsHint,
+                                    trailing: Switch(
+                                      value: settings.boldIcons,
+                                      onChanged: (v) => update(
+                                        (s) => s.copyWith(boldIcons: v),
+                                      ),
+                                    ),
+                                  ),
                                   if (Platform.isMacOS)
                                     _SettingRow(
                                       title: strings.showDockIcon,

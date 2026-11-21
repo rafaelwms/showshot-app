@@ -71,6 +71,7 @@ class AppSettings {
     this.trayLeftClick = TrayAction.area,
     this.editorWindow = EditorWindowMode.maximized,
     this.rememberTools = false,
+    this.boldIcons = false,
     this.toolMemory,
     this.recentFiles = const [],
   });
@@ -126,6 +127,9 @@ class AppSettings {
   /// Restore the last tool and style values when the editor opens (and keep
   /// [toolMemory] up to date while editing). Off by default.
   final bool rememberTools;
+
+  /// Bold weight for the editor/overlay icons (see `AppIcons`).
+  final bool boldIcons;
 
   /// What the editor last used; kept untouched while [rememberTools] is off.
   final ToolMemory? toolMemory;
@@ -188,6 +192,7 @@ class AppSettings {
     TrayAction? trayLeftClick,
     EditorWindowMode? editorWindow,
     bool? rememberTools,
+    bool? boldIcons,
     ToolMemory? toolMemory,
     List<String>? recentFiles,
   }) {
@@ -221,6 +226,7 @@ class AppSettings {
       trayLeftClick: trayLeftClick ?? this.trayLeftClick,
       editorWindow: editorWindow ?? this.editorWindow,
       rememberTools: rememberTools ?? this.rememberTools,
+      boldIcons: boldIcons ?? this.boldIcons,
       toolMemory: toolMemory ?? this.toolMemory,
       recentFiles: recentFiles ?? this.recentFiles,
     );
@@ -255,6 +261,7 @@ class AppSettings {
     'trayLeftClick': trayLeftClick.name,
     'editorWindow': editorWindow.name,
     'rememberTools': rememberTools,
+    'boldIcons': boldIcons,
     'toolMemory': toolMemory?.toJson(),
     'recentFiles': recentFiles,
   };
@@ -327,6 +334,7 @@ class AppSettings {
         EditorWindowMode.maximized,
       ),
       rememberTools: json['rememberTools'] as bool? ?? false,
+      boldIcons: json['boldIcons'] as bool? ?? false,
       toolMemory: json['toolMemory'] is Map
           ? ToolMemory.fromJson(
               (json['toolMemory'] as Map).cast<String, dynamic>(),

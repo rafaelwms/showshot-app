@@ -6,6 +6,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/app_icons.dart';
 import '../../core/app_scope.dart';
 import '../../core/strings.dart';
 import '../../core/theme.dart';
@@ -476,6 +477,7 @@ class _EditorScreenState extends State<EditorScreen> {
 
   Widget _buildTitleBar(EditorController controller, Strings strings) {
     final command = Platform.isMacOS ? '⌘' : 'Ctrl+';
+    final icons = AppIcons.of(context);
     return Container(
       color: context.palette.bg.withValues(alpha: 0.85),
       child: WindowTitleBar(
@@ -488,14 +490,16 @@ class _EditorScreenState extends State<EditorScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             ToolButton(
-              icon: Icons.undo_rounded,
+              icon: icons.undo,
+              iconSize: AppIcons.buttonSize,
               tooltip: strings.undo,
               shortcut: '${command}Z',
               onPressed: controller.canUndo ? controller.undo : null,
               size: 32,
             ),
             ToolButton(
-              icon: Icons.redo_rounded,
+              icon: icons.redo,
+              iconSize: AppIcons.buttonSize,
               tooltip: strings.redo,
               shortcut: '$command⇧Z',
               onPressed: controller.canRedo ? controller.redo : null,
@@ -505,9 +509,9 @@ class _EditorScreenState extends State<EditorScreen> {
             PopupMenuButton<String>(
               tooltip: '',
               icon: Icon(
-                Icons.more_horiz_rounded,
+                icons.more,
                 color: context.palette.textMuted,
-                size: 20,
+                size: AppIcons.menuSize,
               ),
               onSelected: (value) {
                 switch (value) {
@@ -535,14 +539,16 @@ class _EditorScreenState extends State<EditorScreen> {
             const SizedBox(width: 8),
             GhostButton(
               label: strings.copyToClipboard,
-              icon: Icons.copy_rounded,
+              icon: icons.copy,
+              iconSize: AppIcons.labelButtonSize,
               compact: true,
               onPressed: _copy,
             ),
             const SizedBox(width: 8),
             AccentButton(
               label: strings.saveToFile,
-              icon: Icons.save_alt_rounded,
+              icon: icons.save,
+              iconSize: AppIcons.labelButtonSize,
               compact: true,
               onPressed: () => _save(),
             ),
