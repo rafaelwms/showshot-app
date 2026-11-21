@@ -22,13 +22,17 @@ Registro combinado com o Rafael em 2026-11-20. Status: `[ ]` pendente, `[~]` em 
 ## Melhorias
 
 - [ ] **M1 — Editor: ferramenta Crop.** Corte seletivo pelo usuário; proporções fixas (1:1, 3:4, 4:3, 16:9 …) e Custom (livre).
-- [~] **M2 — Configurações/Editor: lembrar ajustes das ferramentas.** Opção liga/desliga para guardar cor, espessura (e demais estilos) e **última ferramenta usada**.
+- [x] **M2 — Configurações/Editor: lembrar ajustes das ferramentas.** Opção liga/desliga para guardar cor, espessura (e demais estilos) e **última ferramenta usada**.
+  - ✅ 2026-11-20 testado no Windows arm64 (MSIX 1.2.0.2/1.2.0.3).
   - Implementado (2026-11-20), falta teste manual: `AppSettings.rememberTools` + `ToolMemory` (tamanhos em unidades lógicas), debounce 300 ms, OCR não é lembrado.
-- [~] **M3 — Configurações: salvar na última pasta usada.** Se não existir mais → pasta padrão; se também não existir → criá-la. (Atenção ao bookmark sandbox do macOS, `saveDirectoryBookmark`.)
+- [x] **M3 — Configurações: salvar na última pasta usada.** Se não existir mais → pasta padrão; se também não existir → criá-la. (Atenção ao bookmark sandbox do macOS, `saveDirectoryBookmark`.)
+  - ✅ 2026-11-20 testado no Windows arm64.
   - Implementado em 2026-11-20 (`saveToLastFolder` + `lastSaveDirectory`, `ExportService.resolveSaveDirectoryPath`, teste em `test/save_directory_test.dart`); falta validar manualmente (Win/Linux/macOS sandbox).
-- [~] **M4 — Configurações: padrão de nome para arquivos sequenciais.** Prefixo customizado: `ARQUIVO_01.png`, `FOTO_01.png`… (definir largura do contador e como o contador continua).
+- [x] **M4 — Configurações: padrão de nome para arquivos sequenciais.** Prefixo customizado: `ARQUIVO_01.png`, `FOTO_01.png`… (definir largura do contador e como o contador continua).
+  - ✅ 2026-11-20 testado no Windows arm64.
   - Implementado em 2026-11-20 (`FileNamer` em `lib/services/file_namer.dart`, campos `fileNaming/namePrefix/nameSeparator/nameDigits/sequenceNext`, UI em Salvar, teste em `test/file_namer_test.dart`); falta validar manualmente.
 - [~] **M5 — Configurações: "Salvar todas as telas" (nova opção).** Captura/salva todos os monitores.
+  - ✅ 2026-11-20 testado no Windows arm64 com 1 monitor. **Falta testar com vários monitores** (um arquivo por tela e imagem combinada).
   - Implementado em 2026-11-20 (`CaptureMode.allScreens` + atalho Ctrl+Shift+5 + item do tray/card da Home, `AppSettings.allScreensMode` perScreen|combined, `ScreenLayout` em `lib/services/screen_layout.dart`, `FileNamer.nextBatch`, `ExportService.compose/saveBatch`; testes em `test/screen_layout_test.dart` e `test/file_namer_test.dart`); falta validar manualmente (1 e 2+ monitores, mixed-DPI, Wayland).
 
 - [ ] **M6 — Editor: ferramenta Carimbo (clone stamp, estilo Photoshop).** Alt/Option+clique define a origem; ao pintar, copia da origem mantendo o deslocamento (modo alinhado). Tamanho do pincel e dureza (borda suave). Não destrutivo, com undo, editável/selecionável como as demais anotações.
