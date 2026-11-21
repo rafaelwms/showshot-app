@@ -6,7 +6,7 @@ import 'package:flutter/painting.dart';
 /// Editor tools. Everything except [select], [hand] and [ocr] creates
 /// annotations — [ocr] draws a selection rectangle like [rect], but on
 /// release it recognizes text in that region instead of leaving a shape
-/// behind.
+/// behind. [stamp] is the clone stamp (see [StampAnnotation]).
 enum ToolType {
   select,
   hand,
@@ -19,6 +19,7 @@ enum ToolType {
   text,
   number,
   blur,
+  stamp,
   ocr,
 }
 
@@ -32,6 +33,8 @@ class AnnotationStyle {
     this.fontSize = 24,
     this.smoothing = 0,
     this.textAlign = TextAlign.left,
+    this.brushSize = 40,
+    this.hardness = 0.5,
   });
 
   final Color color;
@@ -50,6 +53,14 @@ class AnnotationStyle {
   /// line) does not depend on it, so changing it never moves the text.
   final TextAlign textAlign;
 
+  /// Clone stamp brush diameter in image pixels (the properties bar shows it
+  /// in logical px, like [strokeWidth]). Ignored by every other tool.
+  final double brushSize;
+
+  /// Clone stamp edge hardness, 0 (soft falloff) to 1 (crisp edge). Ignored
+  /// by every other tool.
+  final double hardness;
+
   Color get effectiveColor => color.withValues(alpha: color.a * opacity);
 
   AnnotationStyle copyWith({
@@ -60,6 +71,8 @@ class AnnotationStyle {
     double? fontSize,
     double? smoothing,
     TextAlign? textAlign,
+    double? brushSize,
+    double? hardness,
   }) {
     return AnnotationStyle(
       color: color ?? this.color,
@@ -69,6 +82,8 @@ class AnnotationStyle {
       fontSize: fontSize ?? this.fontSize,
       smoothing: smoothing ?? this.smoothing,
       textAlign: textAlign ?? this.textAlign,
+      brushSize: brushSize ?? this.brushSize,
+      hardness: hardness ?? this.hardness,
     );
   }
 }
@@ -199,6 +214,11 @@ abstract class Annotation {
   /// it: rotating those turns their two endpoints instead (see
   /// [ShapeAnnotation.rotatedBy]), which keeps their endpoint handles simple.
   double get rotation => 0;
+
+  /// False for annotations that have no rotation handle (the clone stamp:
+  /// its content is sampled from the screenshot, rotating the window would
+  /// make no sense). The Select tool then neither shows nor hit-tests it.
+  bool get rotatable => true;
 
   /// Center of the un-rotated [bounds]. It doesn't move when [rotation]
   /// changes, so successive rotations never drift.
@@ -989,6 +1009,209 @@ class NumberAnnotation extends Annotation {
       canvas,
       center - Offset(painter.width / 2, painter.height / 2),
     );
+  }
+}
+
+/// Clone stamp state while editing (Photoshop "aligned" mode). Pure, so the
+/// offset rules are unit-tested without an editor.
+///
+/// * [setSource] (Alt/Option-click) marks the point to copy *from* and
+///   forgets the offset.
+/// * The first stroke after that fixes `offset = source - firstPoint`
+///   ([beginStroke]); every later stroke reuses it, so the source keeps
+///   moving in step with the brush, until the next [setSource].
+class StampSourceState {
+  Offset? _source;
+  Offset? _offset;
+
+  /// The point last chosen with Alt-click (image pixels), if any.
+  Offset? get source => _source;
+
+  /// The fixed offset (source minus first stroke point), null until the
+  /// first stroke after [setSource].
+  Offset? get offset => _offset;
+
+  bool get hasSource => _source != null;
+
+  void setSource(Offset point) {
+    _source = point;
+    _offset = null;
+  }
+
+  /// The offset for a stroke starting at [first]. Fixed by the first stroke
+  /// after [setSource] (rounded to whole pixels so the copy is pixel exact)
+  /// and returned unchanged for later ones. Requires [hasSource].
+  Offset beginStroke(Offset first) {
+    return _offset ??= Offset(
+      (_source!.dx - first.dx).roundToDouble(),
+      (_source!.dy - first.dy).roundToDouble(),
+    );
+  }
+
+  /// Where the source crosshair belongs: following the [pointer] once the
+  /// offset is fixed, otherwise at the clicked source point.
+  Offset? markerFor(Offset? pointer) {
+    final offset = _offset;
+    if (offset != null && pointer != null) return pointer + offset;
+    return _source;
+  }
+}
+
+/// Edge blur (sigma, image px) of a clone stamp brush [diameter] with the
+/// given [hardness] (0..1; 1 = none). The solid core is shrunk by 4 sigma so
+/// the faded edge still fits inside the nominal diameter.
+double stampSigma(double diameter, double hardness) =>
+    (1 - hardness.clamp(0.0, 1.0)) * diameter * 0.2;
+
+/// One clone-stamp stroke: the pixels of the *original screenshot* found at
+/// `point + offset` are painted at each point of the stroke, through a round
+/// brush ([AnnotationStyle.brushSize]) with a soft edge
+/// ([AnnotationStyle.hardness]) and [AnnotationStyle.opacity].
+///
+/// Like blur it samples only the un-modified screenshot (`source` of
+/// [paint]), never other annotations (Photoshop's "current layer" sampling),
+/// and anything sampled from outside the image is transparent. Moving the
+/// annotation adjusts [offset] by the translation so the copied patch moves
+/// as a unit instead of re-sampling a different spot. No handles, no
+/// rotation.
+class StampAnnotation extends Annotation {
+  const StampAnnotation({
+    required super.id,
+    required super.style,
+    required this.points,
+    required this.offset,
+  });
+
+  /// Stroke path, image pixels (raw pointer positions).
+  final List<Offset> points;
+
+  /// Source minus destination: the pixel painted at `p` is the screenshot's
+  /// pixel at `p + offset`.
+  final Offset offset;
+
+  @override
+  bool get rotatable => false;
+
+  @override
+  bool get isDegenerate => points.isEmpty;
+
+  @override
+  Rect get bounds {
+    if (points.isEmpty) return Rect.zero;
+    return _pathRect().inflate(style.brushSize / 2);
+  }
+
+  Rect _pathRect() {
+    var minX = points.first.dx, maxX = points.first.dx;
+    var minY = points.first.dy, maxY = points.first.dy;
+    for (final p in points) {
+      if (p.dx < minX) minX = p.dx;
+      if (p.dx > maxX) maxX = p.dx;
+      if (p.dy < minY) minY = p.dy;
+      if (p.dy > maxY) maxY = p.dy;
+    }
+    return Rect.fromLTRB(minX, minY, maxX, maxY);
+  }
+
+  /// Hit test along the stroke: within the brush radius (plus tolerance).
+  @override
+  bool hitTestLocal(Offset point, double tolerance) {
+    final tol = tolerance + style.brushSize / 2;
+    if (points.length == 1) return (points.first - point).distance <= tol;
+    for (var i = 0; i < points.length - 1; i++) {
+      if (_distanceToSegment(point, points[i], points[i + 1]) <= tol) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /// Moves the stroke and keeps the copied content identical: the pixel
+  /// painted at `p + delta` must be the one that was painted at `p`, so the
+  /// offset shrinks by [delta].
+  @override
+  Annotation translated(Offset delta) => StampAnnotation(
+    id: id,
+    style: style,
+    points: [for (final p in points) p + delta],
+    offset: offset - delta,
+  );
+
+  @override
+  Annotation withStyle(AnnotationStyle style) =>
+      StampAnnotation(id: id, style: style, points: points, offset: offset);
+
+  @override
+  Annotation rotatedBy(double delta) => this;
+
+  StampAnnotation appended(Offset point) => StampAnnotation(
+    id: id,
+    style: style,
+    points: [...points, point],
+    offset: offset,
+  );
+
+  @override
+  void paintLocal(Canvas canvas, ui.Image? source) {
+    final diameter = style.brushSize;
+    if (source == null || points.isEmpty || diameter <= 0) return;
+    final sigma = stampSigma(diameter, style.hardness);
+    final core = diameter - 4 * sigma;
+    // The shifted image: the only place the stamp can paint (everything
+    // sampled outside the screenshot stays transparent).
+    final sourceRect = Rect.fromLTWH(
+      -offset.dx,
+      -offset.dy,
+      source.width.toDouble(),
+      source.height.toDouble(),
+    );
+    final layerBounds = _pathRect()
+        .inflate(diameter / 2 + sigma * 2 + 2)
+        .intersect(sourceRect);
+    if (layerBounds.width <= 0 || layerBounds.height <= 0) return;
+
+    canvas.save();
+    // Clip first: the srcIn draw below only touches the image's own rect, so
+    // anything of the mask beyond it would otherwise stay opaque.
+    canvas.clipRect(sourceRect);
+    canvas.saveLayer(
+      layerBounds,
+      Paint()..color = const Color(0xFF000000).withValues(alpha: style.opacity),
+    );
+    // 1) The brush mask: the stroke as a round-capped path, blurred for a
+    //    soft edge (no blur at hardness 1).
+    final mask = Paint()
+      ..color = const Color(0xFF000000)
+      ..isAntiAlias = true;
+    if (sigma > 0) mask.maskFilter = MaskFilter.blur(BlurStyle.normal, sigma);
+    if (points.length == 1) {
+      canvas.drawCircle(points.first, core / 2, mask);
+    } else {
+      mask
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = core
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round;
+      final path = Path()..moveTo(points.first.dx, points.first.dy);
+      for (var i = 1; i < points.length - 1; i++) {
+        final mid = (points[i] + points[i + 1]) / 2;
+        path.quadraticBezierTo(points[i].dx, points[i].dy, mid.dx, mid.dy);
+      }
+      path.lineTo(points.last.dx, points.last.dy);
+      canvas.drawPath(path, mask);
+    }
+    // 2) The screenshot shifted by -offset, kept only where the mask is
+    //    (srcIn multiplies it by the mask's alpha).
+    canvas.save();
+    canvas.translate(-offset.dx, -offset.dy);
+    canvas.drawImage(
+      source,
+      Offset.zero,
+      Paint()..blendMode = ui.BlendMode.srcIn,
+    );
+    canvas.restore();
+    canvas.restore(); // layer (applies the opacity)
+    canvas.restore(); // clip
   }
 }
 

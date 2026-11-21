@@ -44,6 +44,25 @@ class EditorController extends ChangeNotifier {
   /// slider tick: the listener is expected to debounce.
   final VoidCallback? onToolSettingsChanged;
 
+  /// Clone stamp: the Alt-click source and the aligned offset. Per editor
+  /// session only (never remembered).
+  final StampSourceState stampSource = StampSourceState();
+
+  /// Pointer position (image pixels) while the stamp tool is active, for the
+  /// brush cursor and the moving source crosshair. A separate notifier so a
+  /// mouse move repaints only the small overlay, not every annotation (the
+  /// stamps re-rasterize a layer each time they are painted).
+  final ValueNotifier<Offset?> hover = ValueNotifier<Offset?>(null);
+
+  bool _disposed = false;
+
+  /// Updates [hover]; ignored after [dispose] (a MouseRegion can still fire
+  /// `onExit` while the editor is being torn down).
+  void setHover(Offset? point) {
+    if (_disposed || hover.value == point) return;
+    hover.value = point;
+  }
+
   /// Fixed look for the OCR selection rectangle, independent of the user's
   /// current annotation style — it's a selection, not a drawn shape.
   final AnnotationStyle _ocrDraftStyle;
@@ -92,6 +111,7 @@ class EditorController extends ChangeNotifier {
     color: AppColors.palette.first,
     strokeWidth: (3 * pixelRatio).roundToDouble(),
     fontSize: (20 * pixelRatio).roundToDouble(),
+    brushSize: (40 * pixelRatio).roundToDouble(),
   );
   String? get selectedId => _selectedId;
   Annotation? get draft => _draft;
@@ -100,6 +120,7 @@ class EditorController extends ChangeNotifier {
   bool get canUndo => _undo.isNotEmpty;
   bool get canRedo => _redo.isNotEmpty;
   bool get hasAnnotations => _annotations.isNotEmpty;
+  bool get hasStampSource => stampSource.hasSource;
   bool get spaceHeld => _spaceHeld;
   bool get panEnabled => _tool == ToolType.hand || _spaceHeld;
   Size get imageSize => Size(image.width.toDouble(), image.height.toDouble());
@@ -153,6 +174,13 @@ class EditorController extends ChangeNotifier {
     }
     notifyListeners();
     onToolSettingsChanged?.call();
+  }
+
+  /// Sets the clone stamp source (Alt-click). The next stroke fixes the
+  /// offset from it.
+  void setStampSource(Offset point) {
+    stampSource.setSource(point);
+    notifyListeners();
   }
 
   void setSpaceHeld(bool held) {
@@ -229,7 +257,9 @@ class EditorController extends ChangeNotifier {
 
   double _tolerance() => 8 / math.max(zoom, 0.01);
 
-  void pointerDown(Offset p) {
+  /// [alt] is Alt (Option on macOS) held at the click: with the stamp tool it
+  /// sets the source instead of painting.
+  void pointerDown(Offset p, {bool alt = false}) {
     if (panEnabled) return;
     switch (_tool) {
       case ToolType.hand:
@@ -285,6 +315,25 @@ class EditorController extends ChangeNotifier {
         _drag = _DragKind.draw;
         _dragStart = p;
         notifyListeners();
+      case ToolType.stamp:
+        commitTextEditing();
+        if (alt) {
+          setStampSource(p);
+          return;
+        }
+        // Nothing to copy from yet: the properties bar shows the hint.
+        if (!stampSource.hasSource) return;
+        // The first stroke after a new source fixes the offset; later
+        // strokes reuse it (aligned mode).
+        _draft = StampAnnotation(
+          id: newAnnotationId(),
+          style: _style,
+          points: [p],
+          offset: stampSource.beginStroke(p),
+        );
+        _drag = _DragKind.draw;
+        _dragStart = p;
+        notifyListeners();
       case ToolType.ocr:
         commitTextEditing();
         _draft = ShapeAnnotation(
@@ -316,8 +365,10 @@ class EditorController extends ChangeNotifier {
           return;
         }
       }
-      final rotate = current.rotationHandle(rotateHandleDistance);
-      if ((rotate - p).distance <= tolerance * 1.5) {
+      final rotate = current.rotatable
+          ? current.rotationHandle(rotateHandleDistance)
+          : null;
+      if (rotate != null && (rotate - p).distance <= tolerance * 1.5) {
         _drag = _DragKind.rotate;
         _dragStart = p;
         _dragOriginal = current;
@@ -355,6 +406,13 @@ class EditorController extends ChangeNotifier {
           );
         } else if (draft is StrokeAnnotation) {
           if ((draft.points.last - p).distance >= 1.5) {
+            _draft = draft.appended(p);
+          }
+        } else if (draft is StampAnnotation) {
+          // Sparser points for a big brush keep the path (and the mask
+          // stroke) cheap; the brush overlaps itself anyway.
+          final spacing = math.max(1.5, draft.style.brushSize / 20);
+          if ((draft.points.last - p).distance >= spacing) {
             _draft = draft.appended(p);
           }
         }
@@ -401,8 +459,11 @@ class EditorController extends ChangeNotifier {
     if (_drag == null) return;
     switch (_drag!) {
       case _DragKind.draw:
-        final draft = _draft;
+        var draft = _draft;
         _draft = null;
+        if (draft is StampAnnotation && (draft.points.last - p).distance > 0) {
+          draft = draft.appended(p); // the stroke ends where the pointer did
+        }
         if (draft != null && !draft.isDegenerate) {
           if (_tool == ToolType.ocr && draft is ShapeAnnotation) {
             // Not an annotation: report the region and leave nothing behind.
@@ -464,7 +525,7 @@ class EditorController extends ChangeNotifier {
 
   bool isOverRotationHandle(Offset p) {
     final current = selected;
-    if (current == null) return false;
+    if (current == null || !current.rotatable) return false;
     return (current.rotationHandle(rotateHandleDistance) - p).distance <=
         _tolerance() * 1.5;
   }
@@ -592,7 +653,9 @@ class EditorController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
     transformation.dispose();
+    hover.dispose();
     super.dispose();
   }
 }

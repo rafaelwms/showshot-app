@@ -38,7 +38,7 @@ combinação; `Backspace` remove).
 ### Atalhos do editor
 
 `V` selecionar (alça circular acima do objeto gira; `Shift` = passos de 15°) · `H` mover tela · `A` seta · `L` linha · `R` retângulo · `E` elipse ·
-`P` caneta · `M` marcador · `T` texto · `N` numeração · `B` desfoque ·
+`P` caneta · `M` marcador · `T` texto · `N` numeração · `B` desfoque · `S` carimbo (Alt/Option+clique define a origem) ·
 `O` extrair texto (arraste uma região; não deixa anotação, só copia o texto reconhecido) ·
 `⌘/Ctrl+Z` desfazer · `⌘/Ctrl+Shift+Z` refazer · `Delete` excluir seleção ·
 `⌘/Ctrl+C` copiar · `⌘/Ctrl+S` salvar · `⌘/Ctrl+Shift+S` salvar como ·

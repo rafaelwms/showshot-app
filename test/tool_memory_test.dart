@@ -14,6 +14,8 @@ const _style = AnnotationStyle(
   fontSize: 60, // 30 logical px at ratio 2
   smoothing: 0.25,
   textAlign: TextAlign.center,
+  brushSize: 80, // 40 logical px at ratio 2
+  hardness: 0.25,
 );
 
 ToolMemory _capture({
@@ -35,6 +37,8 @@ void main() {
     expect(m.strokeWidth, 5);
     expect(m.fontSize, 30);
     expect(m.textAlign, TextAlign.center);
+    expect(m.brushSize, 40);
+    expect(m.hardness, 0.25);
   });
 
   test('restoring at another pixelRatio keeps the logical size', () {
@@ -43,6 +47,8 @@ void main() {
     expect(style.fontSize, 30);
     expect(style.color.toARGB32(), 0xCC112233);
     expect(_capture(ratio: 2).toStyle(3).strokeWidth, 15);
+    expect(style.brushSize, 40);
+    expect(_capture(ratio: 2).toStyle(3).brushSize, 120);
   });
 
   test('JSON round-trip', () {
@@ -55,6 +61,21 @@ void main() {
     expect(back.toolType, ToolType.rect);
     expect(back.textAlign, TextAlign.center);
     expect(back.toStyle(2).textAlign, TextAlign.center);
+    expect(back.brushSize, 40);
+    expect(back.hardness, 0.25);
+    expect(back.toStyle(2).hardness, 0.25);
+  });
+
+  test('stamp is a persistent tool; old prefs get brush defaults', () {
+    final m = _capture(tool: ToolType.stamp);
+    expect(m.tool, 'stamp');
+    expect(m.toolType, ToolType.stamp);
+    final old = ToolMemory.fromJson({'tool': 'blur'}, 0xFF000000);
+    expect(old.brushSize, 40);
+    expect(old.hardness, 0.5);
+    expect(old.toStyle(1).brushSize, 40);
+    // A wrong type falls back to the default too.
+    expect(ToolMemory.fromJson({'hardness': 'soft'}, 0xFF000000).hardness, 0.5);
   });
 
   test('textAlign defaults to left when missing, unknown or unsupported', () {
@@ -127,11 +148,19 @@ void main() {
       'fontSize': 1,
       'opacity': 0,
       'smoothing': 7,
+      'brushSize': 900,
+      'hardness': 3,
     }, 0xFF000000);
     final s = m.toStyle(2);
     expect(s.strokeWidth, 48);
     expect(s.fontSize, 16);
     expect(s.opacity, 0.1);
     expect(s.smoothing, 1);
+    expect(s.brushSize, 400);
+    expect(s.hardness, 1);
+    expect(
+      ToolMemory.fromJson({'brushSize': 1}, 0xFF000000).toStyle(2).brushSize,
+      8,
+    );
   });
 }

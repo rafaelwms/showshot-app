@@ -28,6 +28,7 @@ List<_ToolSpec> _toolSpecs(AppIcons i) => [
   _ToolSpec(ToolType.text, i.text, 'T'),
   _ToolSpec(ToolType.number, i.number, 'N'),
   _ToolSpec(ToolType.blur, i.blur, 'B'),
+  _ToolSpec(ToolType.stamp, i.stamp, 'S'),
   _ToolSpec(ToolType.ocr, i.ocr, 'O'),
 ];
 
@@ -43,6 +44,7 @@ String toolName(Strings strings, ToolType tool) => switch (tool) {
   ToolType.text => strings.toolText,
   ToolType.number => strings.toolNumber,
   ToolType.blur => strings.toolBlur,
+  ToolType.stamp => strings.toolStamp,
   ToolType.ocr => strings.extractText,
 };
 
@@ -172,7 +174,10 @@ class PropertiesBar extends StatelessWidget {
     final targetIsFreehand = selected is StrokeAnnotation
         ? true
         : selected == null && (tool == ToolType.pen || tool == ToolType.marker);
-    final showColor = !targetIsBlur && tool != ToolType.hand;
+    final targetIsStamp = selected is StampAnnotation
+        ? true
+        : selected == null && tool == ToolType.stamp;
+    final showColor = !targetIsBlur && !targetIsStamp && tool != ToolType.hand;
     final ratio = controller.pixelRatio;
 
     return GlassPanel(
@@ -197,17 +202,42 @@ class PropertiesBar extends StatelessWidget {
             ),
             const _BarDivider(),
           ],
-          _LabeledSlider(
-            icon: icons.strokeWidth,
-            label: targetIsBlur ? strings.toolBlur : strings.strokeWidth,
-            value: (style.strokeWidth / ratio).clamp(1, 24),
-            min: 1,
-            max: 24,
-            display: '${(style.strokeWidth / ratio).round()}',
-            onChanged: (v) => controller.setStyle(
-              style.copyWith(strokeWidth: (v * ratio).roundToDouble()),
+          if (targetIsStamp) ...[
+            _LabeledSlider(
+              icon: icons.strokeWidth,
+              label: strings.brushSize,
+              value: (style.brushSize / ratio).clamp(4, 200),
+              min: 4,
+              max: 200,
+              display: '${(style.brushSize / ratio).round()}',
+              onChanged: (v) => controller.setStyle(
+                style.copyWith(brushSize: (v * ratio).roundToDouble()),
+              ),
             ),
-          ),
+            const _BarDivider(),
+            _LabeledSlider(
+              icon: icons.blur,
+              label: strings.hardness,
+              value: style.hardness,
+              min: 0,
+              max: 1,
+              display: '${(style.hardness * 100).round()}%',
+              onChanged: (v) => controller.setStyle(
+                style.copyWith(hardness: (v * 20).round() / 20),
+              ),
+            ),
+          ] else
+            _LabeledSlider(
+              icon: icons.strokeWidth,
+              label: targetIsBlur ? strings.toolBlur : strings.strokeWidth,
+              value: (style.strokeWidth / ratio).clamp(1, 24),
+              min: 1,
+              max: 24,
+              display: '${(style.strokeWidth / ratio).round()}',
+              onChanged: (v) => controller.setStyle(
+                style.copyWith(strokeWidth: (v * ratio).roundToDouble()),
+              ),
+            ),
           if (targetIsFreehand) ...[
             const _BarDivider(),
             _LabeledSlider(
@@ -234,6 +264,19 @@ class PropertiesBar extends StatelessWidget {
               max: 1,
               display: '${(style.opacity * 100).round()}%',
               onChanged: (v) => controller.setStyle(style.copyWith(opacity: v)),
+            ),
+          ],
+          if (tool == ToolType.stamp &&
+              selected == null &&
+              !controller.hasStampSource) ...[
+            const _BarDivider(),
+            Text(
+              strings.stampNoSourceHint,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: context.palette.textMuted,
+              ),
             ),
           ],
           if (targetIsShape) ...[

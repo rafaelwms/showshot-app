@@ -22,6 +22,8 @@ class ToolMemory {
     required this.fontSize,
     required this.smoothing,
     this.textAlign = TextAlign.left,
+    this.brushSize = 40,
+    this.hardness = 0.5,
   });
 
   /// Tools never restored as the starting tool: the OCR region tool is a
@@ -44,9 +46,18 @@ class ToolMemory {
   /// Text alignment (left, center or right only).
   final TextAlign textAlign;
 
+  /// Logical (UI) clone stamp brush diameter. The stamp's source point and
+  /// offset are deliberately not remembered (they only make sense for one
+  /// screenshot).
+  final double brushSize;
+
+  /// Clone stamp edge hardness, 0..1.
+  final double hardness;
+
   // Same ranges as the properties bar sliders.
   static const _minWidth = 1.0, _maxWidth = 24.0;
   static const _minFont = 8.0, _maxFont = 96.0;
+  static const _minBrush = 4.0, _maxBrush = 200.0;
 
   /// Captures the editor state. A transient [tool] keeps the [previous]
   /// remembered tool, so quitting right after an OCR selection reopens on
@@ -67,6 +78,8 @@ class ToolMemory {
       fontSize: style.fontSize / ratio,
       smoothing: style.smoothing,
       textAlign: _sanitizeAlign(style.textAlign),
+      brushSize: style.brushSize / ratio,
+      hardness: style.hardness,
     );
   }
 
@@ -95,6 +108,9 @@ class ToolMemory {
       fontSize: (fontSize.clamp(_minFont, _maxFont) * ratio).roundToDouble(),
       smoothing: smoothing.clamp(0.0, 1.0).toDouble(),
       textAlign: textAlign,
+      brushSize: (brushSize.clamp(_minBrush, _maxBrush) * ratio)
+          .roundToDouble(),
+      hardness: hardness.clamp(0.0, 1.0).toDouble(),
     );
   }
 
@@ -108,7 +124,9 @@ class ToolMemory {
       other.filled == filled &&
       (other.fontSize - fontSize).abs() < 1e-6 &&
       other.smoothing == smoothing &&
-      other.textAlign == textAlign;
+      other.textAlign == textAlign &&
+      (other.brushSize - brushSize).abs() < 1e-6 &&
+      other.hardness == hardness;
 
   Map<String, dynamic> toJson() => {
     'tool': tool,
@@ -119,6 +137,8 @@ class ToolMemory {
     'fontSize': fontSize,
     'smoothing': smoothing,
     'textAlign': textAlign.name,
+    'brushSize': brushSize,
+    'hardness': hardness,
   };
 
   /// Lenient parse: anything missing or of the wrong type falls back to the
@@ -145,6 +165,8 @@ class ToolMemory {
         'right' => TextAlign.right,
         _ => TextAlign.left,
       },
+      brushSize: math.max(0.0, number('brushSize', 40)),
+      hardness: number('hardness', 0.5),
     );
   }
 }

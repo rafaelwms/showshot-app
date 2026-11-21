@@ -88,6 +88,10 @@ abstract class Strings {
   String get toolText;
   String get toolNumber;
   String get toolBlur;
+  String get toolStamp;
+  String get brushSize;
+  String get hardness;
+  String get stampNoSourceHint;
   String get toolHand;
   String get color;
   String get strokeWidth;
@@ -324,6 +328,14 @@ class _Pt extends Strings {
   String get toolNumber => 'Numeração';
   @override
   String get toolBlur => 'Desfoque';
+  @override
+  String get toolStamp => 'Carimbo';
+  @override
+  String get brushSize => 'Tamanho do pincel';
+  @override
+  String get hardness => 'Dureza';
+  @override
+  String get stampNoSourceHint => 'Alt+clique define a origem';
   @override
   String get toolHand => 'Mover tela';
   @override
@@ -683,6 +695,14 @@ class _En extends Strings {
   String get toolNumber => 'Numbered step';
   @override
   String get toolBlur => 'Blur';
+  @override
+  String get toolStamp => 'Clone stamp';
+  @override
+  String get brushSize => 'Brush size';
+  @override
+  String get hardness => 'Hardness';
+  @override
+  String get stampNoSourceHint => 'Alt+click sets the source';
   @override
   String get toolHand => 'Pan';
   @override

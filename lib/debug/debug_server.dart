@@ -235,6 +235,29 @@ class DebugCommandServer {
           if (align == null) return 'usage: align left|center|right';
           editor.setStyle(editor.style.copyWith(textAlign: align));
           return 'ok';
+        case 'stampsource':
+          // `stampsource x y`: the clone stamp source (like Alt-click), image
+          // pixels. Strokes then go through `tool stamp` + `draw`.
+          final editor = DebugHooks.editor;
+          if (editor == null) return 'no editor';
+          final n = parts.skip(1).map(double.tryParse).toList();
+          if (n.length != 2 || n.contains(null)) {
+            return 'usage: stampsource x y';
+          }
+          editor.setStampSource(Offset(n[0]!, n[1]!));
+          return 'ok source=${n[0]},${n[1]}';
+        case 'stampstyle':
+          // `stampstyle <diameter px> <hardness 0..1>` (image pixels).
+          final editor = DebugHooks.editor;
+          if (editor == null) return 'no editor';
+          editor.setStyle(
+            editor.style.copyWith(
+              brushSize: double.tryParse(parts.elementAtOrNull(1) ?? ''),
+              hardness: double.tryParse(parts.elementAtOrNull(2) ?? ''),
+            ),
+          );
+          return 'ok brush=${editor.style.brushSize} '
+              'hardness=${editor.style.hardness}';
         case 'smooth':
           // `smooth 0..1`: curve smoothing for the pen/marker (and selection).
           final editor = DebugHooks.editor;
@@ -386,7 +409,11 @@ class DebugCommandServer {
                   'bounds=${a.bounds.left.toStringAsFixed(1)},${a.bounds.top.toStringAsFixed(1)},'
                   '${a.bounds.width.toStringAsFixed(1)}x${a.bounds.height.toStringAsFixed(1)}'
                   '${a is TextAnnotation ? ' font=${a.style.fontSize.toStringAsFixed(1)} pos=${o(a.position)} align=${a.style.textAlign.name}' : ''}'
-                  '${a is ShapeAnnotation ? ' start=${o(a.start)} end=${o(a.end)}' : ''}',
+                  '${a is ShapeAnnotation ? ' start=${o(a.start)} end=${o(a.end)}' : ''}'
+                  '${a is StampAnnotation ? ' points=${a.points.length} diameter=${a.style.brushSize.toStringAsFixed(1)} hardness=${a.style.hardness.toStringAsFixed(2)} offset=${o(a.offset)}' : ''}',
+            if (editor.stampSource.hasSource)
+              'stampSource=${o(editor.stampSource.source!)} '
+                  'offset=${editor.stampSource.offset == null ? 'unset' : o(editor.stampSource.offset!)}',
           ];
           final sel = editor.selected;
           if (sel != null) {

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme.dart';
 import '../../models/annotation.dart';
+import 'editor_controller.dart';
 
 /// Paints the screenshot, the annotations and the selection chrome.
 class EditorCanvasPainter extends CustomPainter {
@@ -69,7 +70,9 @@ class EditorCanvasPainter extends CustomPainter {
       canvas.drawCircle(handle, 5.5 * inv, fill);
       canvas.drawCircle(handle, 5.5 * inv, stroke);
     }
-    _paintRotationHandle(canvas, annotation, inv, fill, stroke);
+    if (annotation.rotatable) {
+      _paintRotationHandle(canvas, annotation, inv, fill, stroke);
+    }
   }
 
   /// A stem from the outline to a round handle with a small "turn" arrow.
@@ -137,4 +140,78 @@ class EditorCanvasPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(EditorCanvasPainter old) => true;
+}
+
+/// Clone stamp chrome, painted above (and separately from) the annotations:
+/// the brush outline at the pointer and the source crosshair. It only listens
+/// to the pointer/zoom/controller, so moving the mouse never re-rasterizes
+/// the stamps underneath.
+class StampOverlayPainter extends CustomPainter {
+  StampOverlayPainter({required this.controller})
+    : super(
+        repaint: Listenable.merge([
+          controller,
+          controller.hover,
+          controller.transformation,
+        ]),
+      );
+
+  final EditorController controller;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (controller.tool != ToolType.stamp) return;
+    final inv = 1 / math.max(controller.zoom, 0.01);
+    final pointer = controller.hover.value;
+    if (pointer != null) {
+      // Brush outline: the nominal diameter, dark + light so it reads on any
+      // content.
+      final radius = controller.style.brushSize / 2;
+      canvas.drawCircle(
+        pointer,
+        radius,
+        Paint()
+          ..color = Colors.black.withValues(alpha: 0.6)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2.5 * inv,
+      );
+      canvas.drawCircle(
+        pointer,
+        radius,
+        Paint()
+          ..color = Colors.white
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1 * inv,
+      );
+    }
+    final marker = controller.stampSource.markerFor(pointer);
+    if (marker != null) _paintCrosshair(canvas, marker, inv);
+  }
+
+  /// A small target: ring plus a cross, outlined for contrast.
+  void _paintCrosshair(Canvas canvas, Offset c, double inv) {
+    final r = 8 * inv;
+    final arm = 13 * inv;
+    void draw(Paint paint) {
+      canvas.drawCircle(c, r, paint);
+      canvas.drawLine(c - Offset(arm, 0), c + Offset(arm, 0), paint);
+      canvas.drawLine(c - Offset(0, arm), c + Offset(0, arm), paint);
+    }
+
+    draw(
+      Paint()
+        ..color = Colors.black.withValues(alpha: 0.6)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3.5 * inv,
+    );
+    draw(
+      Paint()
+        ..color = AppColors.cyan
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5 * inv,
+    );
+  }
+
+  @override
+  bool shouldRepaint(StampOverlayPainter old) => old.controller != controller;
 }

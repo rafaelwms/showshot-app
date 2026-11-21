@@ -35,7 +35,8 @@ Registro combinado com o Rafael em 2026-11-20. Status: `[ ]` pendente, `[~]` em 
   - ✅ 2026-11-20 testado no Windows arm64 com 1 monitor. **Falta testar com vários monitores** (um arquivo por tela e imagem combinada).
   - Implementado em 2026-11-20 (`CaptureMode.allScreens` + atalho Ctrl+Shift+5 + item do tray/card da Home, `AppSettings.allScreensMode` perScreen|combined, `ScreenLayout` em `lib/services/screen_layout.dart`, `FileNamer.nextBatch`, `ExportService.compose/saveBatch`; testes em `test/screen_layout_test.dart` e `test/file_namer_test.dart`); falta validar manualmente (1 e 2+ monitores, mixed-DPI, Wayland).
 
-- [ ] **M6 — Editor: ferramenta Carimbo (clone stamp, estilo Photoshop).** Alt/Option+clique define a origem; ao pintar, copia da origem mantendo o deslocamento (modo alinhado). Tamanho do pincel e dureza (borda suave). Não destrutivo, com undo, editável/selecionável como as demais anotações.
+- [~] **M6 — Editor: ferramenta Carimbo (clone stamp, estilo Photoshop).** Alt/Option+clique define a origem; ao pintar, copia da origem mantendo o deslocamento (modo alinhado). Tamanho do pincel e dureza (borda suave). Não destrutivo, com undo, editável/selecionável como as demais anotações.
+  - Implementado em 2026-11-21, falta compilar e testar manualmente: `ToolType.stamp` (tecla `S`), `StampAnnotation` + `StampSourceState` (`annotation.dart`), `AnnotationStyle.brushSize/hardness` (+ `ToolMemory`), debug `stampsource`/`stampstyle`, testes em `test/stamp_test.dart`.
 - [x] **M7 — Editor: alinhamento do texto.** Esquerda/centro/direita (justificar a decidir) na ferramenta Texto e alterável pela ferramenta Seleção (barra de propriedades).
   - ✅ 2026-11-21 aprovado pelo Rafael no Windows arm64 (MSIX 1.2.0.4).
   - Implementado em 2026-11-21, falta compilar e testar manualmente: `AnnotationStyle.textAlign` (+ `ToolMemory`), controle de 3 botões na barra, `TextField.textAlign`, `align` no debug server; justificar fora do escopo.

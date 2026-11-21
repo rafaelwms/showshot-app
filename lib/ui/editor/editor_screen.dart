@@ -372,6 +372,7 @@ class _EditorScreenState extends State<EditorScreen> {
       LogicalKeyboardKey.keyT => ToolType.text,
       LogicalKeyboardKey.keyN => ToolType.number,
       LogicalKeyboardKey.keyB => ToolType.blur,
+      LogicalKeyboardKey.keyS => ToolType.stamp,
       LogicalKeyboardKey.keyO => ToolType.ocr,
       _ => null,
     };
@@ -661,18 +662,31 @@ class _EditorCanvasState extends State<_EditorCanvas> {
         onHover: (event) {
           if (controller.tool == ToolType.select) {
             setState(() => _hover = event.localPosition);
+          } else if (controller.tool == ToolType.stamp) {
+            controller.setHover(event.localPosition);
           }
         },
+        onExit: (_) => controller.setHover(null),
         child: Listener(
           behavior: HitTestBehavior.opaque,
           onPointerDown: (event) {
             if (event.buttons != kPrimaryMouseButton) return;
-            controller.pointerDown(event.localPosition);
+            // Alt (Option on macOS) + click sets the clone stamp source.
+            controller.pointerDown(
+              event.localPosition,
+              alt: HardwareKeyboard.instance.isAltPressed,
+            );
           },
-          onPointerMove: (event) => controller.pointerMove(
-            event.localPosition,
-            shift: HardwareKeyboard.instance.isShiftPressed,
-          ),
+          onPointerMove: (event) {
+            // Mouse-move hover events stop while a button is held.
+            if (controller.tool == ToolType.stamp) {
+              controller.setHover(event.localPosition);
+            }
+            controller.pointerMove(
+              event.localPosition,
+              shift: HardwareKeyboard.instance.isShiftPressed,
+            );
+          },
           onPointerUp: (event) => controller.pointerUp(event.localPosition),
           onPointerCancel: (event) => controller.pointerUp(event.localPosition),
           child: Stack(
@@ -691,6 +705,16 @@ class _EditorCanvasState extends State<_EditorCanvas> {
                   ),
                 ),
               ),
+              if (controller.tool == ToolType.stamp)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: RepaintBoundary(
+                      child: CustomPaint(
+                        painter: StampOverlayPainter(controller: controller),
+                      ),
+                    ),
+                  ),
+                ),
               if (editing != null)
                 Positioned(
                   left: editing.position.dx - 6,
