@@ -33,19 +33,20 @@ Registro combinado com o Rafael em 2026-11-20. Status: `[ ]` pendente, `[~]` em 
 - [x] **M4 — Configurações: padrão de nome para arquivos sequenciais.** Prefixo customizado: `ARQUIVO_01.png`, `FOTO_01.png`… (definir largura do contador e como o contador continua).
   - ✅ 2026-11-20 testado no Windows arm64.
   - Implementado em 2026-11-20 (`FileNamer` em `lib/services/file_namer.dart`, campos `fileNaming/namePrefix/nameSeparator/nameDigits/sequenceNext`, UI em Salvar, teste em `test/file_namer_test.dart`); falta validar manualmente.
-- [~] **M5 — Configurações: "Salvar todas as telas" (nova opção).** Captura/salva todos os monitores.
+- [x] **M5 — Configurações: "Salvar todas as telas" (nova opção).** Captura/salva todos os monitores.
+  - ✅ 2026-11-21 testado no macOS com 2 monitores (um arquivo por tela e combinada, disposição correta).
   - ✅ 2026-11-20 testado no Windows arm64 com 1 monitor. **Falta testar com vários monitores** (um arquivo por tela e imagem combinada).
   - Implementado em 2026-11-20 (`CaptureMode.allScreens` + atalho Ctrl+Shift+5 + item do tray/card da Home, `AppSettings.allScreensMode` perScreen|combined, `ScreenLayout` em `lib/services/screen_layout.dart`, `FileNamer.nextBatch`, `ExportService.compose/saveBatch`; testes em `test/screen_layout_test.dart` e `test/file_namer_test.dart`); falta validar manualmente (1 e 2+ monitores, mixed-DPI, Wayland).
 - [x] **M3/M5 — Correções (2026-11-21)** ✅ testadas no macOS pelo Rafael. (a) Ações sem janela (todas as telas, salvar direto/copiar/extrair texto da overlay): se a notificação do SO não foi entregue, a Home é aberta para mostrar o toast (`_reportHeadless`). (b) macOS sandbox: "última pasta usada" sobrevive ao relançamento (`lastSaveDirectoryBookmark`, `requestFolderAccess` nativo com painel "Permitir" após Salvar Como, vários escopos ativos; testes em `test/save_directory_test.dart`).
 
-- [~] **M6 — Editor: ferramenta Carimbo (clone stamp, estilo Photoshop).** Alt/Option+clique define a origem; ao pintar, copia da origem mantendo o deslocamento (modo alinhado). Tamanho do pincel e dureza (borda suave). Não destrutivo, com undo, editável/selecionável como as demais anotações.
-  - Implementado; testar no Windows arm64 com o pacote final da release.
+- [x] **M6 — Editor: ferramenta Carimbo (clone stamp, estilo Photoshop).** Alt/Option+clique define a origem; ao pintar, copia da origem mantendo o deslocamento (modo alinhado). Tamanho do pincel e dureza (borda suave). Não destrutivo, com undo, editável/selecionável como as demais anotações.
+  - ✅ 2026-11-21 testado no macOS.
   - Implementado em 2026-11-21, falta compilar e testar manualmente: `ToolType.stamp` (tecla `S`), `StampAnnotation` + `StampSourceState` (`annotation.dart`), `AnnotationStyle.brushSize/hardness` (+ `ToolMemory`), debug `stampsource`/`stampstyle`, testes em `test/stamp_test.dart`.
 - [x] **M7 — Editor: alinhamento do texto.** Esquerda/centro/direita (justificar a decidir) na ferramenta Texto e alterável pela ferramenta Seleção (barra de propriedades).
   - ✅ 2026-11-21 aprovado pelo Rafael no Windows arm64 (MSIX 1.2.0.4).
   - Implementado em 2026-11-21, falta compilar e testar manualmente: `AnnotationStyle.textAlign` (+ `ToolMemory`), controle de 3 botões na barra, `TextField.textAlign`, `align` no debug server; justificar fora do escopo.
-- [~] **M8 — Editor: ícones homogêneos.** Uma única família de ícones, mesmo peso, grade e tamanho óptico, substituindo a mistura atual (Material + pintados à mão, ex.: `_CursorIcon`).
-  - Implementado; testar no Windows arm64 com o pacote final da release.
+- [x] **M8 — Editor: ícones homogêneos.** Uma única família de ícones, mesmo peso, grade e tamanho óptico, substituindo a mistura atual (Material + pintados à mão, ex.: `_CursorIcon`).
+  - ✅ 2026-11-21 testado no macOS.
   - Decisão 2026-11-21: Phosphor **Regular** como padrão + opção "Ícones em negrito" (Phosphor Bold). Prévia aprovada: https://claude.ai/artifact/RAHtohWtmzvKs7izxXZiWF
   - Implementado em 2026-11-21, falta `flutter pub get`, compilar e testar visualmente: `lib/core/app_icons.dart` (`AppIcons` + tamanhos ópticos), `phosphor_flutter`, `AppSettings.boldIcons` (Configurações > Geral, debug `setting boldIcons`), editor/overlay/barra de título migrados; Home/Configurações seguem Material.
 
