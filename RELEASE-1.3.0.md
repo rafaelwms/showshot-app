@@ -79,7 +79,7 @@ M8 vem antes de M6/M1 para que as ferramentas novas já nasçam com os ícones n
 
 > Ordem de validação (2026-11-21), tudo nativo e uma de cada vez: 1. Mac DMG · 2. Mac App Store · 3. Windows arm64 (Radxa) · 4. Linux arm64 (Radxa) · 5. Linux x64 (Desktop) · 6. Windows x64 (Desktop).
 >
-> Progresso: ✅ 1. Mac DMG (notarizado, release em rascunho v1.3.0 no GitHub) · ✅ 2. Mac App Store (build 3 enviado) · ✅ 3. Windows arm64 (MSIX 1.3.0.0 de teste validado pelo Rafael; pacote da Store em `C:\projects\dist` na Radxa, aguardando o código final) · ⏳ 4. Linux arm64 · ⏳ 5. Linux x64 · ⏳ 6. Windows x64.
+> Progresso: ✅ 1. Mac DMG (notarizado, release em rascunho v1.3.0 no GitHub) · ✅ 2. Mac App Store (build 3 enviado) · ✅ 3. Windows arm64 (MSIX 1.3.0.0 de teste validado pelo Rafael; pacote da Store em `C:\projects\dist` na Radxa, aguardando o código final) · ✅ 4. Linux arm64 (Radxa, Ubuntu 26.10 Wayland: `showshot_1.3.0_arm64.deb` com lintian limpo, validado pelo Rafael, anexado à release em rascunho) · ⏳ 5. Linux x64 · ⏳ 6. Windows x64.
 > Atenção: DMG, App Store build 3 e o MSIX arm64 são de antes do merge do `develop-linux` (correção das elipses no Linux). Se o código mudar de novo, regenerar todos no fim (App Store build 4).
 >
 > Regra combinada (2026-11-21): o merge no `main` só acontece depois de validar **todas** as plataformas e arquiteturas: macOS arm64, Windows x64, Windows arm64, Linux x64 e Linux arm64.
