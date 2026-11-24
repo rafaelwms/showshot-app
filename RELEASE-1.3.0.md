@@ -5,9 +5,9 @@ Registro combinado com o Rafael em 2026-11-20. Status: `[ ]` pendente, `[~]` em 
 
 ## Correção
 
-- [~] **C1 — "Iniciar com o Sistema" não funciona no Windows (x64 e arm64) em instalações via Winget.**
+- [x] **C1 — "Iniciar com o Sistema" não funciona no Windows (x64 e arm64) em instalações via Winget.**
   - ✅ **2026-11-20, arm64 validado (Radxa, MSIX de teste sideload):** a tarefa `ShowShotStartup` ficou habilitada (State=2, "Rafael WMS" no Gerenciador de Tarefas), nada foi gravado na `Run`, e após o reboot o app subiu de `WindowsApps` com `--autostart`, só na bandeja.
-  - Pendentes: x64 no Desktop (`asus-win11`) e confirmação final no pacote da Store (1.3.0 publicada).
+  - ✅ 2026-11-23, x64 validado no Desktop (MSIX de teste). A causa de o Desktop sempre iniciar era uma chave `Run` antiga, apontando para um build de debug solto; ela foi removida no teste. Falta só a confirmação final com o pacote da Store publicado.
   - Radxa: o Show Shot da Store foi desinstalado para o teste e o MSIX de teste (publicador "Msix Testing") está instalado; o certificado de teste está em `LocalMachine\TrustedPeople`. Desfazer ao final.
   Só funciona no Desktop do Rafael, onde o build original foi feito (exe solto, sem pacote).
   - Hipótese principal: o Winget instala o pacote **MSIX** da Store (`msstore`). `StartupService` usa `launch_at_startup`
@@ -79,7 +79,7 @@ M8 vem antes de M6/M1 para que as ferramentas novas já nasçam com os ícones n
 
 > Ordem de validação (2026-11-21), tudo nativo e uma de cada vez: 1. Mac DMG · 2. Mac App Store · 3. Windows arm64 (Radxa) · 4. Linux arm64 (Radxa) · 5. Linux x64 (Desktop) · 6. Windows x64 (Desktop).
 >
-> Progresso: ✅ 1. Mac DMG (notarizado, release em rascunho v1.3.0 no GitHub) · ✅ 2. Mac App Store (build 3 enviado) · ✅ 3. Windows arm64 (MSIX 1.3.0.0 de teste validado pelo Rafael; pacote da Store em `C:\projects\dist` na Radxa, aguardando o código final) · ✅ 4. Linux arm64 (Radxa, Ubuntu 26.10 Wayland: `showshot_1.3.0_arm64.deb` com lintian limpo, validado pelo Rafael, anexado à release em rascunho) · ✅ 5. Linux x64 (Desktop, Ubuntu 26.04.1 Wayland: `showshot_1.3.0_amd64.deb` com lintian limpo, validado pelo Rafael, anexado à release em rascunho) · ⏳ 6. Windows x64.
+> Progresso: ✅ 1. Mac DMG (notarizado, release em rascunho v1.3.0 no GitHub) · ✅ 2. Mac App Store (build 3 enviado) · ✅ 3. Windows arm64 (MSIX 1.3.0.0 de teste validado pelo Rafael; pacote da Store em `C:\projects\dist` na Radxa, aguardando o código final) · ✅ 4. Linux arm64 (Radxa, Ubuntu 26.10 Wayland: `showshot_1.3.0_arm64.deb` com lintian limpo, validado pelo Rafael, anexado à release em rascunho) · ✅ 5. Linux x64 (Desktop, Ubuntu 26.04.1 Wayland: `showshot_1.3.0_amd64.deb` com lintian limpo, validado pelo Rafael, anexado à release em rascunho) · ✅ 6. Windows x64 (Desktop: MSIX 1.3.0.0 de teste; **C1 validada**: StartupTask State=2, sem chave Run, subiu no boot de `WindowsApps` com `--autostart`, só na bandeja).
 > Atenção: DMG, App Store build 3 e o MSIX arm64 são de antes do merge do `develop-linux` (correção das elipses no Linux). Se o código mudar de novo, regenerar todos no fim (App Store build 4).
 >
 > Regra combinada (2026-11-21): o merge no `main` só acontece depois de validar **todas** as plataformas e arquiteturas: macOS arm64, Windows x64, Windows arm64, Linux x64 e Linux arm64.
