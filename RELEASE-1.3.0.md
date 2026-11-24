@@ -73,6 +73,8 @@ M8 vem antes de M6/M1 para que as ferramentas novas já nasçam com os ícones n
 
 ## Extra (fora do código, opcional)
 
+- **Decisão 2026-11-24:** Winget fica **só pela Store** (opção C). O Rafael não quer pagar por assinatura de código nem que apareça o aviso do SmartScreen. Então o Winget continua mostrando `9NX0J9N066SM` / "Unknown" pela fonte `msstore`, e não há manifesto no winget-pkgs.
+
 - Listagem no Winget: a fonte `msstore` mostra o ID da Store (`9NX0J9N066SM`) e versão "Unknown". Isso é o normal dessa fonte, não um erro de configuração da loja. Para aparecer como `RafaelWMS.ShowShot` com versão, é preciso publicar um manifesto no repositório comunitário `microsoft/winget-pkgs` (o `wingetcreate` ajuda). Isso exige um instalador baixável por URL pública (MSIX assinado ou exe).
 
 ## Fechamento da release
@@ -80,7 +82,7 @@ M8 vem antes de M6/M1 para que as ferramentas novas já nasçam com os ícones n
 > Ordem de validação (2026-11-21), tudo nativo e uma de cada vez: 1. Mac DMG · 2. Mac App Store · 3. Windows arm64 (Radxa) · 4. Linux arm64 (Radxa) · 5. Linux x64 (Desktop) · 6. Windows x64 (Desktop).
 >
 > Progresso: ✅ 1. Mac DMG (notarizado, release em rascunho v1.3.0 no GitHub) · ✅ 2. Mac App Store (build 3 enviado) · ✅ 3. Windows arm64 (MSIX 1.3.0.0 de teste validado pelo Rafael; pacote da Store em `C:\projects\dist` na Radxa, aguardando o código final) · ✅ 4. Linux arm64 (Radxa, Ubuntu 26.10 Wayland: `showshot_1.3.0_arm64.deb` com lintian limpo, validado pelo Rafael, anexado à release em rascunho) · ✅ 5. Linux x64 (Desktop, Ubuntu 26.04.1 Wayland: `showshot_1.3.0_amd64.deb` com lintian limpo, validado pelo Rafael, anexado à release em rascunho) · ✅ 6. Windows x64 (Desktop: MSIX 1.3.0.0 de teste; **C1 validada**: StartupTask State=2, sem chave Run, subiu no boot de `WindowsApps` com `--autostart`, só na bandeja).
-> Atenção: DMG, App Store build 3 e o MSIX arm64 são de antes do merge do `develop-linux` (correção das elipses no Linux). Se o código mudar de novo, regenerar todos no fim (App Store build 4).
+> DMG, App Store build 3 e o MSIX arm64 são de antes do merge do `develop-linux` (correção das elipses, que só afeta o Linux). **Decisão 2026-11-24: manter, sem regerar.**
 >
 > Regra combinada (2026-11-21): o merge no `main` só acontece depois de validar **todas** as plataformas e arquiteturas: macOS arm64, Windows x64, Windows arm64, Linux x64 e Linux arm64.
 
